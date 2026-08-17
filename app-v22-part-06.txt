@@ -1,0 +1,161 @@
+etupPills("adpPills",true,p=>{adpPos=p;localStorage.setItem("de_adp_pos",p);renderAdp()});
+setupPills("rankPills",true,p=>{rankPos=p;localStorage.setItem("de_rank_pos",p);renderRankings()});
+setupPills("draftPills",true,p=>{draftPos=p;localStorage.setItem("de_draft_pos",p);renderDraft()});
+
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
+ document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");
+ document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));document.getElementById("page-"+b.dataset.page).classList.add("active");
+ localStorage.setItem("de_last_page",b.dataset.page)
+});
+
+function tagHtml(k,i){let t=TAGS[k];return '<span class="tag" style="color:'+(t.color||"#fff")+'" title="'+t.name+'" onclick="event.stopPropagation();openEdit('+i+')">'+t.emoji+'</span>'}
+function tagsHtml(p){let i=players.indexOf(p);return (p.tags||[]).filter(k=>TAGS[k]).map(k=>tagHtml(k,i)).join("")}
+function noteHtml(p,i){return p.note?'<span class="note-dot" title="'+esc(p.note)+'" onclick="event.stopPropagation();openEdit('+i+')">✎</span>':""}
+function notePreview(p){return p.note?'<div class="note-preview">'+esc(p.note)+'</div>':""}
+
+function hasTag(p,key){return key==="ALL" ? true : ((p.tags||[]).includes(key))}
+function filterByActiveTag(list){return list.filter(p=>hasTag(p,activeTagFilter))}
+function tagCount(key){return key==="ALL"?players.length:players.filter(p=>(p.tags||[]).includes(key)).length}
+function renderTagDrawer(){
+ let items=[["ALL",{name:"All Players",emoji:"🏷️",color:"#dce5ec"}],...Object.entries(TAGS)];
+ document.getElementById("tagFilterList").innerHTML=items.map(([k,t])=>{
+   let active=activeTagFilter===k?" active":"";
+   let count=tagCount(k);
+   return '<button class="tag-filter'+active+'" onclick="setActiveTagFilter(\''+k+'\')"><span class="tag-left"><span style="font-size:16px;color:'+(t.color||"#fff")+'">'+t.emoji+'</span><span>'+t.name+'</span></span><span class="tag-count">'+count+'</span></button>'
+ }).join("");
+}
+function updateFilterIndicators(){
+ let active=activeTagFilter!=="ALL";
+ let name=active?(TAGS[activeTagFilter]?.name||"Filtered"):"";
+ document.getElementById("openTagDrawer")?.classList.toggle("filtered",active);
+ ["adpFilterIndicator","rankFilterIndicator","draftFilterIndicator"].forEach(id=>{
+   let el=document.getElementById(id);if(!el)return;
+   el.classList.toggle("show",active);
+   el.innerHTML=active?'<span class="dot-mini"></span>'+esc(name):"";
+ });
+}
+function setActiveTagFilter(key){
+ activeTagFilter=key;
+ renderTagDrawer();updateFilterIndicators();renderAdp();renderRankings();renderDraft();
+}
+
+function rankingHeads(){
+ let second=rankPos==="ALL"?"My Pos Rank":"My Overall";
+ return '<div class="colheads rankings"><div>Player</div><div>'+(rankPos==="ALL"?"My Overall":"My Pos Rank")+'</div><div>'+second+'</div><div>Sleeper Rank</div><div>My Edge</div><div>ADP Move</div></div>'
+}
+function marketHeads(){return '<div class="colheads market"><div>Player</div><div>Sleeper Rank</div><div>My Pos Rank</div><div>Move</div></div>'}
+
+function rankRow(p,mode="rankings"){
+ let i=players.indexOf(p),m=marketFor(p),mv=moveText(p);
+ let myPrimary=rankPos==="ALL"?p.overall:p.posRank;
+ let mySecondary=rankPos==="ALL"?p.position+p.posRank:p.overall;
+ let edge=m?.rank!=null?m.rank-p.overall:null;
+ let draftControl=mode==="draft"?'<button class="draft-btn" onclick="event.stopPropagation();toggleDraft('+i+')">'+"Draft"+'</button>':"";
+ return '<div class="player rankings '+(mode==="draft"&&p.drafted?"drafted":"")+'" draggable="'+(mode==="rankings")+'" data-index="'+i+'">'+
+ '<div class="person" onclick="openDetail('+i+')"><img class="avatar" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div class="playertext"><div class="name-line"><span class="name">'+esc(p.name)+'</span><span class="tags">'+tagsHtml(p)+'</span>'+noteHtml(p,i)+'</div><div class="meta"><span class="pos '+p.position+'">'+p.position+'</span><span>'+esc(p.team)+'</span><span>Bye '+esc(p.bye)+'</span>'+draftControl+'</div>'+notePreview(p)+'</div></div>'+
+ '<div class="metric"><div class="num">#'+myPrimary+'</div></div>'+
+ '<div class="metric"><div class="num">'+(rankPos==="ALL"?p.position+"#"+p.posRank:"#"+mySecondary)+'</div></div>'+
+ '<div class="metric"><div class="num">'+(m?.rank!=null?"#"+m.rank:"—")+'</div></div>'+
+ '<div class="metric"><div class="edge '+(edge==null?"":edge>0?"good":edge<0?"bad":"")+'">'+(edge==null?"—":(edge>0?"+":"")+edge)+'</div></div>'+
+ '<div class="metric"><div class="move-wrap"><div class="move '+mv.cls+'">'+mv.text+'</div>'+sparklineHtml(p)+'</div></div></div>'
+}
+function marketRow(p){
+ let owned=findPersonalByName(p.name),i=owned?players.indexOf(owned):-1,m=marketFor(p),mv=moveText(p);
+ let clickable=i>=0?' onclick="openDetail('+i+')"':"";
+ let add=i<0?'<button class="market-add" data-market-add="'+esc(p.name)+'">＋ Add</button>':"";
+ return '<div class="player market"><div class="person"'+clickable+'><img class="avatar" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div class="playertext"><div class="name-line"><span class="name">'+esc(p.name)+'</span><span class="tags">'+(owned?tagsHtml(owned):"")+'</span>'+(owned?noteHtml(owned,i):"")+'</div><div class="meta"><span class="pos '+p.position+'">'+p.position+'</span><span>'+esc(p.team||"FA")+'</span>'+add+'</div>'+(owned?notePreview(owned):"")+'</div></div>'+
+ '<div class="metric"><div class="num">'+(m?.rank!=null?"#"+m.rank:"—")+'</div></div><div class="metric"><div class="num">'+(m?.posRank? p.position+"#"+m.posRank:"—")+'</div></div><div class="metric"><div class="move-wrap"><div class="move '+mv.cls+'">'+mv.text+'</div>'+sparklineHtml(p)+'</div></div></div>'
+}
+
+function renderAdp(){
+ let q=document.getElementById("adpSearch").value.toLowerCase();
+ let base=sleeperPool.length?sleeperPool:players;
+ let list=base.filter(p=>marketFor(p)?.rank!=null&&(adpPos==="ALL"||p.position===adpPos)&&(!q||p.name.toLowerCase().includes(q)||(p.team||"").toLowerCase().includes(q)));
+ if(activeTagFilter!=="ALL")list=list.filter(p=>{let owned=findPersonalByName(p.name);return owned&&hasTag(owned,activeTagFilter)});
+ list.sort((a,b)=>marketFor(a).rank-marketFor(b).rank);
+ document.getElementById("adpList").innerHTML=list.length?marketHeads()+list.map(marketRow).join(""):'<div class="small">Loading Sleeper rankings…</div>'
+}
+function renderRankings(){
+ let q=document.getElementById("rankSearch").value.toLowerCase();
+ let list=filterByActiveTag(players).filter(p=>(rankPos==="ALL"||p.position===rankPos)&&(!q||p.name.toLowerCase().includes(q)||(p.team||"").toLowerCase().includes(q)));
+ document.getElementById("addTier").style.display=rankPos==="ALL"?"none":"inline-block";
+ if(!players.length){
+   document.getElementById("rankList").innerHTML='<div class="empty-list"><h3>This ranking list is empty</h3><p>Add players one at a time, import a ranking file, or create another list from Current Sleeper ADP.</p><button class="btn primary" onclick="openAddPlayer()">＋ Add Player</button></div>';return
+ }
+ if(rankPos==="ALL"){
+  list.sort((a,b)=>(a.overall||99999)-(b.overall||99999));
+  document.getElementById("rankList").innerHTML=rankingHeads()+list.map(p=>rankRow(p)).join("");
+ }else{
+  list.sort((a,b)=>(a.posRank||9999)-(b.posRank||9999));
+  let html=rankingHeads(),cfg=tiers[rankPos]||[],valid=new Set(cfg.map(t=>t.id));
+  let untiered=list.filter(p=>!p.tier||!valid.has(p.tier));
+  if(untiered.length){html+='<div class="tier-drop" data-tier="0"><div class="untiered-sep"><b>Untiered</b><span class="tier-count">'+untiered.length+' players</span></div>'+untiered.map(p=>rankRow(p)).join("")+'</div>'}
+  cfg.forEach((t,idx)=>{
+   let tp=list.filter(p=>p.tier===t.id);
+   html+='<div class="tier-drop" data-tier="'+t.id+'"><div class="tier-sep"><div class="tier-main"><button class="tier-icon" title="Move tier up" onclick="moveTier('+t.id+',-1)">↑</button><span class="tier-name">'+esc(t.name)+'</span><span class="tier-count">'+tp.length+' players</span><button class="tier-icon" title="Edit tier" onclick="editTier('+t.id+')">✎</button><button class="tier-icon delete" title="Delete tier" onclick="deleteTier('+t.id+')">×</button><button class="tier-icon" title="Move tier down" onclick="moveTier('+t.id+',1)">↓</button></div></div>'+(tp.length?tp.map(p=>rankRow(p)).join(""):'<div class="empty-tier">Drag a player here</div>')+'</div>'
+  });
+  if(!cfg.length&&!untiered.length)html+='<div class="empty-list"><h3>No '+rankPos+' players yet</h3><p>Add a player or import rankings.</p></div>';
+  document.getElementById("rankList").innerHTML=html;
+ }
+ wireDrag();wireTierDrops()
+}
+
+function renderDraft(){
+ let q=document.getElementById("draftSearch").value.toLowerCase();
+ let list=filterByActiveTag(players).filter(p=>!p.drafted&&(draftPos==="ALL"||p.position===draftPos)&&(!q||p.name.toLowerCase().includes(q)||p.team.toLowerCase().includes(q))).sort((a,b)=>a.overall-b.overall);
+ let drafted=players.filter(p=>p.drafted);let old=rankPos;rankPos="ALL";
+ document.getElementById("draftList").innerHTML=rankingHeads()+list.map(p=>rankRow(p,"draft")).join("");
+ document.getElementById("draftedCount").textContent=drafted.length;rankPos=old
+}
+function renderDraftedModal(){
+ let drafted=players.filter(p=>p.drafted).sort((a,b)=>(b.draftedAt||0)-(a.draftedAt||0));
+ document.getElementById("draftedList").innerHTML=drafted.length?drafted.map(p=>'<div class="drafted-row"><div><div class="drafted-name">'+esc(p.name)+'</div><div class="drafted-meta">'+p.position+' · '+esc(p.team)+' · My Overall #'+p.overall+'</div></div><button class="undo-btn" onclick="toggleDraft('+players.indexOf(p)+');renderDraftedModal()">Undo</button></div>').join(""):'<div class="small" style="padding:20px 0">No drafted players yet.</div>'
+}
+function orderedPos(pos){let cfg=tiers[pos]||[],order=new Map(cfg.map((t,i)=>[t.id,i]));return players.filter(p=>p.position===pos).sort((a,b)=>(order.get(a.tier)??999)-(order.get(b.tier)??999)||(a.posRank||9999)-(b.posRank||9999))}
+function resequencePos(pos){orderedPos(pos).forEach((p,i)=>p.posRank=i+1)}
+
+function transparentDragImage(e){const img=new Image();img.src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";try{e.dataTransfer.setDragImage(img,0,0)}catch(_){}}
+function playerRowsIn(container){return Array.from(container.querySelectorAll(":scope > .player[draggable=true]"))}
+function captureRects(){return new Map(Array.from(document.querySelectorAll("#rankList .player")).map(el=>[el,el.getBoundingClientRect()]))}
+function animateFromRects(first){Array.from(document.querySelectorAll("#rankList .player")).forEach(el=>{const f=first.get(el);if(!f)return;const l=el.getBoundingClientRect();const dx=f.left-l.left,dy=f.top-l.top;if(Math.abs(dx)>0.5||Math.abs(dy)>0.5){el.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:"translate(0,0)"}],{duration:190,easing:"cubic-bezier(.2,.8,.2,1)"})}})}
+function moveDraggedRelative(target,e){
+ const dragged=dragState.el;if(!dragged||target===dragged)return;
+ if(rankPos!=="ALL"){const targetPlayer=players[Number(target.dataset.index)];const draggedPlayer=players[dragState.index];if(!targetPlayer||!draggedPlayer||targetPlayer.position!==draggedPlayer.position)return;if(target.parentElement!==dragged.parentElement) target.parentElement.appendChild(dragged)}
+ const rect=target.getBoundingClientRect();const before=e.clientY < rect.top+rect.height/2;const first=captureRects();if(before)target.parentNode.insertBefore(dragged,target);else target.parentNode.insertBefore(dragged,target.nextSibling);animateFromRects(first)
+}
+function wireDrag(){document.querySelectorAll('#rankList .player[draggable=true]').forEach(r=>{
+  r.addEventListener("pointerdown",()=>r.classList.add("holding"));r.addEventListener("pointerup",()=>r.classList.remove("holding"));r.addEventListener("pointerleave",()=>r.classList.remove("holding"));
+  r.addEventListener("dragstart",e=>{dragState.el=r;dragState.index=Number(r.dataset.index);const p=players[dragState.index];dragState.startPos=rankPos==="ALL"?p.overall:p.posRank;dragState.startTier=p.tier;r.classList.remove("holding");r.classList.add("dragging");e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",r.dataset.index);transparentDragImage(e)});
+  r.addEventListener("dragover",e=>{e.preventDefault();moveDraggedRelative(r,e)});r.addEventListener("drop",e=>{e.preventDefault();e.stopPropagation();commitVisualOrder()});r.addEventListener("dragend",()=>{r.classList.remove("holding");if(dragState.el)dragState.el.classList.remove("dragging");commitVisualOrder()})
+ })}
+function wireTierDrops(){if(rankPos==="ALL")return;document.querySelectorAll(".tier-drop[data-tier]").forEach(el=>{
+  el.addEventListener("dragover",e=>{e.preventDefault();if(!dragState.el)return;const p=players[dragState.index];if(!p||p.position!==rankPos)return;el.classList.add("drop-target");if(!e.target.closest(".player")&&dragState.el.parentElement!==el){const first=captureRects();el.appendChild(dragState.el);animateFromRects(first)}});
+  el.addEventListener("dragleave",()=>el.classList.remove("drop-target"));el.addEventListener("drop",e=>{e.preventDefault();el.classList.remove("drop-target");commitVisualOrder()})
+ })}
+function commitVisualOrder(){
+ if(!dragState.el||dragState.index==null)return;const p=players[dragState.index];
+ if(rankPos==="ALL"){const domRows=Array.from(document.querySelectorAll('#rankList > .player.rankings'));if(domRows.length)domRows.forEach((row,i)=>players[Number(row.dataset.index)].overall=i+1)}else{
+   document.querySelectorAll("#rankList .tier-drop[data-tier]").forEach(tierEl=>{const tierId=Number(tierEl.dataset.tier);playerRowsIn(tierEl).forEach(row=>players[Number(row.dataset.index)].tier=tierId)});
+   const ordered=[];const untieredEl=document.querySelector('.tier-drop[data-tier="0"]');if(untieredEl)ordered.push(...playerRowsIn(untieredEl).map(row=>players[Number(row.dataset.index)]));
+   (tiers[rankPos]||[]).forEach(t=>{const el=document.querySelector('.tier-drop[data-tier="'+t.id+'"]');if(el)ordered.push(...playerRowsIn(el).map(row=>players[Number(row.dataset.index)]))});ordered.forEach((x,i)=>x.posRank=i+1)
+ }
+ save();const el=dragState.el;dragState={el:null,index:null,startPos:null,startTier:null};if(el)el.classList.remove("dragging");renderRankings()
+}
+function deleteTier(id){if(rankPos==="ALL")return;let cfg=tiers[rankPos]||[],idx=cfg.findIndex(t=>t.id===id);if(idx<0)return;let tier=cfg[idx],target=cfg.length>1?(idx>0?cfg[idx-1]:cfg[idx+1]):null;let msg=target?"Delete "+tier.name+"? Players in it will move to "+target.name+".":"Delete "+tier.name+"? Its players will become untiered.";if(!confirm(msg))return;players.filter(p=>p.position===rankPos&&p.tier===id).forEach(p=>p.tier=target?target.id:null);cfg.splice(idx,1);tiers[rankPos]=cfg;resequencePos(rankPos);save();renderRankings()}
+function addTier(){if(rankPos==="ALL")return;let cfg=tiers[rankPos]||[],id=cfg.length?Math.max(...cfg.map(t=>t.id))+1:1;cfg.push({id,name:"New Tier"});tiers[rankPos]=cfg;save();renderRankings();editTier(id)}
+function editTier(id){if(rankPos==="ALL")return;let t=(tiers[rankPos]||[]).find(x=>x.id===id);if(!t)return;tierEdit={pos:rankPos,id};document.getElementById("tierContext").textContent=rankPos+" · Tier "+((tiers[rankPos]||[]).indexOf(t)+1);document.getElementById("tierNameInput").value=t.name;document.getElementById("tierModal").classList.add("open");setTimeout(()=>document.getElementById("tierNameInput").select(),30)}
+function moveTier(id,dir){let cfg=tiers[rankPos]||[],i=cfg.findIndex(t=>t.id===id),j=i+dir;if(i<0||j<0||j>=cfg.length)return;[cfg[i],cfg[j]]=[cfg[j],cfg[i]];resequencePos(rankPos);save();renderRankings()}
+
+function openEdit(i){
+ document.getElementById("drawer").classList.remove("open");editIndex=i;let p=players[i];
+ document.getElementById("editPlayerName").textContent=p.name+" · "+p.position+" · "+p.team;document.getElementById("noteInput").value=p.note||"";
+ document.getElementById("tagPicker").innerHTML=Object.entries(TAGS).map(([k,t])=>{let selected=(p.tags||[]).includes(k);return '<button class="tag-choice '+(selected?"selected":"")+'" style="border-color:'+t.color+'" onclick="toggleTag('+i+',\''+k+'\')"><span class="'+((k==="green"||k==="red")?"symbol":"emoji")+'" style="color:'+t.color+'">'+t.emoji+'</span><span>'+t.name+'</span><span class="selected-mark">✓</span></button>'}).join("");
+ document.getElementById("editModal").classList.add("open")
+}
+function toggleTag(i,k){let p=players[i];p.tags=p.tags||[];p.tags=p.tags.includes(k)?p.tags.filter(x=>x!==k):[...p.tags,k];save();openEdit(i);renderTagDrawer();renderAdp();renderRankings();renderDraft()}
+function toggleDraft(i){players[i].drafted=!players[i].drafted;players[i].draftedAt=players[i].drafted?Date.now():null;save();renderTagDrawer();renderDraft();if(document.getElementById("draftedModal").classList.contains("open"))renderDraftedModal()}
+
+function openDetail(i){
+ let p=players[i],m=marketFor(p),h=history[p.name]||[],edge=m?.rank!=null?m.rank-p.overall:null;
+ document.getElementById("drawerContent").innerHTML='<div class="detailhead"><img class="detailimg" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div><h2 style="margin:0">'+esc(p.name)+'</h2><div class="small">'+esc(p.team)+' · '+p.position+' · '+p.position+p.posRank+'</div></div></div>'+
+ '<div class="stats"><div class="stat"><b>#'+p.overall+'</b><span>My Overall</span></div><div class="stat"><b>'+(m?.rank!=null?"#"+m.rank:"—")+'</b><span>Sleeper Rank</span></div><div class="stat"><b>'+(edge==null?"—":(edge>0?"+":"")+edge)+'</b><span>My
