@@ -5,30 +5,53 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Draft Edge</title>
 <style>
-html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.loading{min-height:100vh;display:grid;place-items:center;padding:24px}.box{text-align:center;max-width:620px}.mark{font-size:28px;font-weight:1000;letter-spacing:-.04em}.sub{margin-top:8px;color:#8d9baa;font-size:12px;line-height:1.55}.err{margin-top:12px;padding:10px 12px;border:1px solid #4a3340;border-radius:10px;background:#1c141a;color:#f3b6c2;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}
+html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}.loading{min-height:100vh;display:grid;place-items:center;padding:24px}.box{text-align:center;max-width:720px}.mark{font-size:30px;font-weight:1000;letter-spacing:-.04em}.sub{margin-top:8px;color:#8d9baa;font-size:13px;line-height:1.55}.err{margin-top:14px;padding:12px 14px;border:1px solid #4a3340;border-radius:10px;background:#1c141a;color:#f3b6c2;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}
 </style>
-<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 </head>
 <body>
 <div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">Loading your draft room…</div></div></div>
 <script>
 (async()=>{
+  const showError=(err)=>{
+    const msg=String(err&&err.message?err.message:err).replace(/[&<>]/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[s]));
+    document.body.innerHTML='<div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">The app could not start. Error:</div><div class="err">'+msg+'</div></div></div>';
+  };
   try{
-    if(!window.pako) throw new Error('Loader library did not load');
-    const res=await fetch('./draft-edge-v21.payload?v=22',{cache:'no-store'});
-    if(!res.ok) throw new Error('App file could not be downloaded (HTTP '+res.status+')');
-    const b64=(await res.text()).trim();
-    if(!b64) throw new Error('App file was empty');
-    const raw=atob(b64);
-    const bytes=new Uint8Array(raw.length);
-    for(let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
-    const app=pako.ungzip(bytes,{to:'string'});
-    if(!app.includes('<html') && !app.includes('<!doctype')) throw new Error('App file did not decode correctly');
+    const files=Array.from({length:8},(_,i)=>'./app-v22-part-'+String(i).padStart(2,'0')+'.txt?v=23');
+    const parts=await Promise.all(files.map(async file=>{
+      const r=await fetch(file,{cache:'no-store'});
+      if(!r.ok)throw new Error('Could not download '+file+' (HTTP '+r.status+')');
+      return r.text();
+    }));
+    let app=parts.join('');
+
+    // Correct two punctuation characters lost while transferring one plain-text chunk.
+    app=app.replaceAll('row.push(cell.replace(/\\r$/," ");rows.push(row)','row.push(cell.replace(/\\r$/," "));rows.push(row)');
+    app=app.replaceAll('row.push(cell.replace(/\\r$/,"" );rows.push(row)','row.push(cell.replace(/\\r$/,""));rows.push(row)');
+    app=app.replaceAll('row.push(cell.replace(/\\r$/,"" );rows.push(row)}','row.push(cell.replace(/\\r$/,""));rows.push(row)}');
+    app=app.replaceAll('row.push(cell.replace(/\\r$/,"" );rows.push(row);','row.push(cell.replace(/\\r$/,""));rows.push(row);');
+    app=app.replaceAll('row.push(cell.replace(/\\r$/,"" );rows.push(row)','row.push(cell.replace(/\\r$/,""));rows.push(row)');
+    app=app.replaceAll('row.push(cell.replace(/\\r$/,"" );rows.push(row)','row.push(cell.replace(/\\r$/,""));rows.push(row)');
+    // Actual transferred form:
+    app=app.split('row.push(cell.replace(/\\r$/,"" );rows.push(row)').join('row.push(cell.replace(/\\r$/,""));rows.push(row)');
+    app=app.split('row.push(cell.replace(/\\r$/,"" );rows.push(row)}').join('row.push(cell.replace(/\\r$/,""));rows.push(row)}');
+    app=app.split('row.push(cell.replace(/\\r$/,"" );rows.push(row);').join('row.push(cell.replace(/\\r$/,""));rows.push(row);');
+    app=app.split('row.push(cell.replace(/\\r$/,"" );rows.push(row)').join('row.push(cell.replace(/\\r$/,""));rows.push(row)');
+    app=app.replace(/row\.push\(cell\.replace\(\/\\r\$\/\s*,\s*""\s*\);rows\.push\(row\)/g,'row.push(cell.replace(/\\r$/,""));rows.push(row)');
+
+    if(!app.startsWith('<!doctype html>')||!app.includes('DRAFT EDGE')||!app.includes('DRAFT_EDGE_SUPABASE_URL')||!app.trim().endsWith('</html>')){
+      throw new Error('One of the app files was incomplete.');
+    }
+
+    // Syntax-check the main inline JavaScript before replacing this page.
+    const scripts=[...app.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+      .map(m=>m[1]).filter(code=>code.trim());
+    for(const code of scripts){
+      try{new Function(code)}catch(e){throw new Error('App JavaScript syntax error: '+e.message)}
+    }
+
     document.open();document.write(app);document.close();
-  }catch(err){
-    document.body.innerHTML='<div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">The app failed to load. This message tells us exactly what broke:</div><div class="err">'+String(err && err.message ? err.message : err).replace(/[&<>]/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[s]))+'</div></div></div>';
-    console.error(err);
-  }
+  }catch(err){showError(err);console.error(err)}
 })();
 </script>
 </body>
