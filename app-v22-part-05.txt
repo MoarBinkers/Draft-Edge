@@ -1,0 +1,241 @@
+rroyo", "position": "TE", "team": "SEA", "bye": "11", "posRank": 42, "tier": 9, "tags": [], "note": "", "drafted": false}, {"overall": 247, "name": "Mike Gesicki", "position": "TE", "team": "CIN", "bye": "6", "posRank": 43, "tier": 9, "tags": [], "note": "", "drafted": false}, {"overall": 248, "name": "Tyler Higbee", "position": "TE", "team": "LAR", "bye": "11", "posRank": 44, "tier": 9, "tags": [], "note": "", "drafted": false}, {"overall": 249, "name": "Justin Joly", "position": "TE", "team": "DEN", "bye": "10", "posRank": 45, "tier": 10, "tags": [], "note": "", "drafted": false}, {"overall": 250, "name": "Darnell Washington", "position": "TE", "team": "PIT", "bye": "9", "posRank": 46, "tier": 10, "tags": [], "note": "", "drafted": false}, {"overall": 251, "name": "Noah Gray", "position": "TE", "team": "KC", "bye": "5", "posRank": 47, "tier": 10, "tags": [], "note": "", "drafted": false}, {"overall": 252, "name": "Ja'Tavion Sanders", "position": "TE", "team": "CAR", "bye": "5", "posRank": 48, "tier": 10, "tags": [], "note": "", "drafted": false}, {"overall": 253, "name": "Daniel Bellinger", "position": "TE", "team": "TEN", "bye": "9", "posRank": 49, "tier": 11, "tags": [], "note": "", "drafted": false}, {"overall": 254, "name": "Sam Roush", "position": "TE", "team": "CHI", "bye": "10", "posRank": 50, "tier": 11, "tags": [], "note": "", "drafted": false}];
+const INITIAL_TIERS={"QB": [{"id": 1, "name": "Tier 1"}, {"id": 2, "name": "Tier 2"}, {"id": 3, "name": "Tier 3"}, {"id": 4, "name": "Tier 4"}, {"id": 5, "name": "Tier 5"}, {"id": 6, "name": "Tier 6"}, {"id": 7, "name": "Tier 7"}], "RB": [{"id": 1, "name": "Tier 1"}, {"id": 2, "name": "Tier 2"}, {"id": 3, "name": "Tier 3"}, {"id": 4, "name": "Tier 4"}, {"id": 5, "name": "Tier 5"}, {"id": 6, "name": "Tier 6"}, {"id": 7, "name": "Tier 7"}, {"id": 8, "name": "Tier 8"}, {"id": 9, "name": "Tier 9"}, {"id": 10, "name": "Tier 10"}, {"id": 11, "name": "Tier 11"}, {"id": 12, "name": "Tier 12"}, {"id": 13, "name": "Tier 13"}], "TE": [{"id": 1, "name": "Tier 1"}, {"id": 2, "name": "Tier 2"}, {"id": 3, "name": "Tier 3"}, {"id": 4, "name": "Tier 4"}, {"id": 5, "name": "Tier 5"}, {"id": 6, "name": "Tier 6"}, {"id": 7, "name": "Tier 7"}, {"id": 8, "name": "Tier 8"}, {"id": 9, "name": "Tier 9"}, {"id": 10, "name": "Tier 10"}, {"id": 11, "name": "Tier 11"}], "WR": [{"id": 1, "name": "Tier 1"}, {"id": 2, "name": "Tier 2"}, {"id": 3, "name": "Tier 3"}, {"id": 4, "name": "Tier 4"}, {"id": 5, "name": "Tier 5"}, {"id": 6, "name": "Tier 6"}, {"id": 7, "name": "Tier 7"}, {"id": 8, "name": "Tier 8"}, {"id": 9, "name": "Tier 9"}, {"id": 10, "name": "Tier 10"}, {"id": 11, "name": "Tier 11"}, {"id": 12, "name": "Tier 12"}, {"id": 13, "name": "Tier 13"}, {"id": 14, "name": "Tier 14"}, {"id": 15, "name": "Tier 15"}, {"id": 16, "name": "Tier 16"}, {"id": 17, "name": "Tier 17"}]};
+const POS=["QB","RB","WR","TE"];
+const MARKET_POS=["QB","RB","WR","TE","K","DEF"];
+const TAGS={
+ green:{name:"Green Light",emoji:"✔",color:"#4ade80"},
+ yellow:{name:"Hesitant",emoji:"🤔",color:"#facc15"},
+ red:{name:"Avoid",emoji:"❌",color:"#fb7185"},
+ blue:{name:"Target",emoji:"🎯",color:"#60a5fa"},
+ purple:{name:"Sleeper",emoji:"💎",color:"#c084fc"},
+ orange:{name:"Risk",emoji:"⚠️",color:"#fb923c"},
+ teal:{name:"Breakout",emoji:"🚀",color:"#2dd4bf"}
+};
+
+const EMPTY_TIERS={QB:[],RB:[],WR:[],TE:[]};
+let market=JSON.parse(localStorage.getItem("de5_market")||"{}");
+let history=JSON.parse(localStorage.getItem("de5_history")||"{}");
+let sleeperPool=structuredClone(INITIAL).map(p=>({...p,tier:null,tags:[],note:"",drafted:false}));
+let rankingLists={},activeListId=null,players=[],tiers=structuredClone(EMPTY_TIERS);
+let currentUser=null,supabaseClient=null,cloudSaveTimer=null,suspendCloudSave=false;
+let pendingImport=null,authMode="signin";
+let rankPos="ALL",adpPos="ALL",draftPos="ALL",editIndex=null,tierEdit=null,draftTimer=null,dragState={el:null,index:null,startPos:null,startTier:null},activeTagFilter="ALL";
+
+function localId(){return "local_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7)}
+function emptyTiers(){return structuredClone(EMPTY_TIERS)}
+function migrateLocalLists(){
+ let stored=JSON.parse(localStorage.getItem("de16_lists")||"null");
+ if(stored&&Object.keys(stored).length){rankingLists=stored;activeListId=localStorage.getItem("de16_active_list")||Object.keys(stored)[0];return}
+ let oldPlayers=JSON.parse(localStorage.getItem("de5_players")||"null")||structuredClone(INITIAL);
+ let oldTiers=JSON.parse(localStorage.getItem("de5_tiers")||"null")||structuredClone(INITIAL_TIERS);
+ let id=localId();
+ rankingLists[id]={id,name:"My Rankings",players:oldPlayers,tiers:oldTiers,createdAt:Date.now(),updatedAt:Date.now()};
+ activeListId=id;saveLocalLists()
+}
+function saveLocalLists(){
+ localStorage.setItem("de16_lists",JSON.stringify(rankingLists));
+ localStorage.setItem("de16_active_list",activeListId||"")
+}
+function loadActiveList(){
+ let list=rankingLists[activeListId];
+ if(!list){players=[];tiers=emptyTiers();return}
+ players=structuredClone(list.players||[]);
+ tiers=structuredClone(list.tiers||EMPTY_TIERS);
+ POS.forEach(pos=>{if(!Array.isArray(tiers[pos]))tiers[pos]=[]})
+}
+function currentList(){return rankingLists[activeListId]||null}
+function save(){
+ let list=currentList();
+ if(list){
+   list.players=structuredClone(players);
+   list.tiers=structuredClone(tiers);
+   list.updatedAt=Date.now();
+   rankingLists[activeListId]=list;
+   if(!currentUser)saveLocalLists();
+ }
+ localStorage.setItem("de5_market",JSON.stringify(market));
+ localStorage.setItem("de5_history",JSON.stringify(history));
+ if(currentUser&&!suspendCloudSave)queueCloudSave()
+}
+function queueCloudSave(){
+ clearTimeout(cloudSaveTimer);
+ cloudSaveTimer=setTimeout(async()=>{
+   if(!supabaseClient||!currentUser||!activeListId||!currentList())return;
+   let list=currentList();
+   try{
+     await supabaseClient.from("ranking_lists").update({
+       name:list.name,
+       data:{players:list.players,tiers:list.tiers},
+       updated_at:new Date().toISOString()
+     }).eq("id",activeListId).eq("user_id",currentUser.id)
+   }catch(e){console.warn("Cloud save failed",e)}
+ },500)
+}
+migrateLocalLists();loadActiveList();
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function norm(s){return String(s||"").toLowerCase().replace(/\b(jr|sr|ii|iii|iv)\b\.?/g,"").replace(/[^a-z0-9]/g,"")}
+function sleeper(url){return fetch(url).then(r=>{if(!r.ok)throw new Error("Sleeper request failed ("+r.status+")");return r.json()})}
+
+function renderListSwitcher(){
+ let select=document.getElementById("listSelect");if(!select)return;
+ let lists=Object.values(rankingLists).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+ select.innerHTML=lists.map(l=>'<option value="'+esc(l.id)+'">'+esc(l.name||"Untitled List")+'</option>').join("");
+ if(activeListId)select.value=activeListId;
+}
+function renderEverything(){
+ renderListSwitcher();renderTagDrawer();updateFilterIndicators();renderAdp();renderRankings();renderDraft()
+}
+function switchList(id){
+ if(!rankingLists[id])return;
+ activeListId=id;if(!currentUser)saveLocalLists();
+ loadActiveList();activeTagFilter="ALL";renderEverything()
+}
+async function persistNewList(list){
+ if(currentUser&&supabaseClient){
+   let {data,error}=await supabaseClient.from("ranking_lists").insert({
+     user_id:currentUser.id,name:list.name,data:{players:list.players,tiers:list.tiers}
+   }).select().single();
+   if(error)throw error;
+   list.id=data.id;list.createdAt=Date.parse(data.created_at)||Date.now();list.updatedAt=Date.parse(data.updated_at)||Date.now()
+ }
+ rankingLists[list.id]=list;activeListId=list.id;
+ if(!currentUser)saveLocalLists();
+ loadActiveList();renderEverything();return list
+}
+function playerTemplate(src,overall,posRank){
+ return {overall,name:src.name,position:src.position||src.pos||"NA",team:src.team||"FA",bye:src.bye??"—",posRank,tier:null,tags:[],note:"",drafted:false}
+}
+async function createNamedList(kind){
+ let name=document.getElementById("newListName").value.trim();
+ if(!name){document.getElementById("newListName").focus();return}
+ if(kind==="import"){
+   document.getElementById("newListModal").classList.remove("open");
+   document.getElementById("importListName").value=name;
+   document.getElementById("rankingFileInput").click();return
+ }
+ let list={id:localId(),name,players:[],tiers:emptyTiers(),createdAt:Date.now(),updatedAt:Date.now()};
+ if(kind==="adp"){
+   if(!sleeperPool.length||!market[sleeperPool[0]?.name])await refreshCurrentAdp();
+   let pool=sleeperPool.filter(p=>POS.includes(p.position)).slice(0,300);
+   let pc={};list.players=pool.map((p,i)=>{pc[p.position]=(pc[p.position]||0)+1;return playerTemplate(p,i+1,pc[p.position])})
+ }
+ try{
+   await persistNewList(list);
+   document.getElementById("newListModal").classList.remove("open")
+ }catch(e){alert("Could not create list: "+e.message)}
+}
+function openNewList(){
+ document.getElementById("newListName").value="";
+ document.getElementById("newListModal").classList.add("open");
+ setTimeout(()=>document.getElementById("newListName").focus(),30)
+}
+function findPersonalByName(name){let n=norm(name);return players.find(p=>norm(p.name)===n)||null}
+function addPlayerFromPoolName(name){
+ if(findPersonalByName(name))return;
+ let src=sleeperPool.find(p=>norm(p.name)===norm(name));if(!src)return;
+ let overall=players.length?Math.max(...players.map(p=>Number(p.overall)||0))+1:1;
+ let posRank=players.filter(p=>p.position===src.position).length+1;
+ players.push(playerTemplate(src,overall,posRank));save();renderEverything()
+}
+function openAddPlayer(){
+ document.getElementById("addPlayerSearch").value="";
+ renderPlayerPicker("");
+ document.getElementById("addPlayerModal").classList.add("open")
+}
+function renderPlayerPicker(q){
+ q=String(q||"").toLowerCase();
+ let owned=new Set(players.map(p=>norm(p.name)));
+ let pool=sleeperPool.filter(p=>POS.includes(p.position)&&!owned.has(norm(p.name))&&(!q||p.name.toLowerCase().includes(q)||(p.team||"").toLowerCase().includes(q))).slice(0,120);
+ document.getElementById("playerPicker").innerHTML=pool.length?pool.map(p=>'<div class="pick-player"><div class="pick-left"><img class="avatar" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div><b style="font-size:11px">'+esc(p.name)+'</b><div class="small">'+p.position+' · '+esc(p.team||"FA")+(marketFor(p)?.rank?' · Sleeper #'+marketFor(p).rank:'')+'</div></div></div><button class="btn" data-add-player="'+esc(p.name)+'">＋ Add</button></div>').join(""):'<div class="small" style="padding:20px">No matching unlisted players.</div>'
+}
+function csvEscape(v){let s=String(v??"");return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
+function exportCurrentList(){
+ let list=currentList();if(!list)return;
+ let rows=[["Overall Rank","Name","Position","Team","Bye","Position Rank","Tier","Tags","Note","Drafted"]];
+ players.slice().sort((a,b)=>(a.overall||9999)-(b.overall||9999)).forEach(p=>{
+   let tierName=(tiers[p.position]||[]).find(t=>t.id===p.tier)?.name||"";
+   rows.push([p.overall,p.name,p.position,p.team,p.bye,p.posRank,tierName,(p.tags||[]).join("|"),p.note||"",p.drafted?"Yes":"No"])
+ });
+ let blob=new Blob([rows.map(r=>r.map(csvEscape).join(",")).join("\n")],{type:"text/csv;charset=utf-8"});
+ let a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=(list.name||"draft-edge-ranking-list").replace(/[^a-z0-9_-]+/gi,"-")+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)
+}
+function parseCSV(text){
+ let rows=[],row=[],cell="",q=false;
+ for(let i=0;i<text.length;i++){
+   let c=text[i];
+   if(q){if(c==='"'&&text[i+1]==='"'){cell+='"';i++}else if(c==='"')q=false;else cell+=c}
+   else if(c==='"')q=true;
+   else if(c===","){row.push(cell);cell=""}
+   else if(c==="\n"){row.push(cell.replace(/\r$/,"");rows.push(row);row=[];cell=""}
+   else cell+=c
+ }
+ if(cell.length||row.length){row.push(cell.replace(/\r$/,"");rows.push(row)}
+ return rows.filter(r=>r.some(x=>String(x).trim()))
+}
+function normalizeHeader(s){return String(s||"").trim().toLowerCase().replace(/[^a-z0-9]+/g," ")}
+function prepareImport(text,fileName){
+ let rows=parseCSV(text);if(rows.length<2){alert("That CSV does not appear to contain ranking rows.");return}
+ let headers=rows[0].map(normalizeHeader);
+ let idx=(aliases)=>headers.findIndex(h=>aliases.includes(h));
+ let ni=idx(["name","player","player name"]),oi=idx(["overall rank","overall","rank"]),pi=idx(["position","pos"]),ti=idx(["team"]),bi=idx(["bye","bye week"]),pri=idx(["position rank","pos rank","positional rank"]);
+ if(ni<0){alert("I couldn't find a player/name column.");return}
+ let sourceMap=new Map([...INITIAL,...sleeperPool].map(p=>[norm(p.name),p]));
+ let parsed=[];
+ rows.slice(1).forEach((r,rowIndex)=>{
+   let name=String(r[ni]||"").trim();if(!name)return;
+   let src=sourceMap.get(norm(name))||{};
+   let position=String(pi>=0?r[pi]:"").trim().toUpperCase()||src.position||"";
+   if(!POS.includes(position))return;
+   parsed.push({sourceOrder:rowIndex+1,overall:Number(oi>=0?r[oi]:"")||rowIndex+1,name,position,team:String(ti>=0?r[ti]:"").trim()||src.team||"FA",bye:String(bi>=0?r[bi]:"").trim()||src.bye||"—",posRank:Number(pri>=0?r[pri]:"")||null})
+ });
+ parsed.sort((a,b)=>a.overall-b.overall);
+ let pc={};parsed.forEach((p,i)=>{p.overall=i+1;pc[p.position]=(pc[p.position]||0)+1;if(!p.posRank)p.posRank=pc[p.position]});
+ pendingImport=parsed;
+ document.getElementById("importSummary").textContent=parsed.length+" players recognized from "+fileName+". Tiers, tags and notes will start empty.";
+ document.getElementById("importPreview").innerHTML='<div class="import-row head"><span>#</span><span>Player</span><span>Pos</span><span>Pos Rank</span></div>'+parsed.slice(0,80).map(p=>'<div class="import-row"><span>#'+p.overall+'</span><span>'+esc(p.name)+'</span><span>'+p.position+'</span><span>'+p.position+'#'+p.posRank+'</span></div>').join("")+(parsed.length>80?'<div class="small" style="padding:10px">+'+(parsed.length-80)+' more players</div>':"");
+ if(!document.getElementById("importListName").value)document.getElementById("importListName").value=fileName.replace(/\.[^.]+$/,"");
+ document.getElementById("importPreviewModal").classList.add("open")
+}
+async function confirmImportList(){
+ let name=document.getElementById("importListName").value.trim();if(!name||!pendingImport?.length)return;
+ let list={id:localId(),name,tiers:emptyTiers(),players:pendingImport.map(p=>({...p,tier:null,tags:[],note:"",drafted:false})),createdAt:Date.now(),updatedAt:Date.now()};
+ try{await persistNewList(list);pendingImport=null;document.getElementById("importPreviewModal").classList.remove("open");document.getElementById("settingsModal").classList.remove("open")}catch(e){alert("Import failed: "+e.message)}
+}
+async function duplicateCurrentList(){
+ let src=currentList();if(!src)return;
+ let name=prompt("Name the duplicate:",src.name+" Copy");if(!name?.trim())return;
+ let list={id:localId(),name:name.trim(),players:structuredClone(players),tiers:structuredClone(tiers),createdAt:Date.now(),updatedAt:Date.now()};
+ try{await persistNewList(list)}catch(e){alert(e.message)}
+}
+async function renameCurrentList(){
+ let list=currentList();if(!list)return;
+ let name=prompt("Rename this ranking list:",list.name);if(!name?.trim())return;
+ list.name=name.trim();rankingLists[activeListId]=list;save();renderListSwitcher()
+}
+async function deleteCurrentList(){
+ let list=currentList();if(!list||!confirm('Delete "'+list.name+'"? This cannot be undone.'))return;
+ if(currentUser&&supabaseClient){let {error}=await supabaseClient.from("ranking_lists").delete().eq("id",activeListId).eq("user_id",currentUser.id);if(error){alert(error.message);return}}
+ delete rankingLists[activeListId];let ids=Object.keys(rankingLists);
+ if(ids.length){activeListId=ids[0];if(!currentUser)saveLocalLists();loadActiveList();renderEverything()}
+ else{activeListId=null;players=[];tiers=emptyTiers();if(!currentUser)saveLocalLists();renderEverything();openNewList()}
+}
+function imgUrl(p){let m=market[p.name];return m?.id?"https://sleepercdn.com/content/nfl/players/thumb/"+encodeURIComponent(m.id)+".jpg":""}
+function marketFor(p){return market[p.name]||null}
+function moveText(p){let m=marketFor(p)?.move||0;return {text:m>0?"↑ "+m:m<0?"↓ "+Math.abs(m):"—",cls:m>0?"up":m<0?"down":"flat"}}
+function sparklineHtml(p){
+ let current=marketFor(p)?.rank;let points=(history[p.name]||[]).slice(-7).map(x=>Number(x.rank)).filter(Number.isFinite);
+ if(Number.isFinite(current) && (!points.length || points[points.length-1]!==current)) points.push(current);
+ if(points.length<2) return '<span class="spark-empty" title="More ADP history is needed">· · ·</span>';
+ let min=Math.min(...points),max=Math.max(...points),range=Math.max(1,max-min);let w=48,h=18,pad=2;
+ let coords=points.map((v,i)=>{let x=pad+(i/(points.length-1))*(w-pad*2);let y=pad+((v-min)/range)*(h-pad*2);return [x,y]});
+ let d=coords.map((pt,i)=>(i?'L':'M')+pt[0].toFixed(1)+' '+pt[1].toFixed(1)).join(' ');let last=coords[coords.length-1];let delta=points[0]-points[points.length-1];
+ let color=delta>0?'#4ade80':delta<0?'#fb7185':'#718191';let title='Recent Sleeper ranks: '+points.map(x=>'#'+x).join(' → ');
+ return '<svg class="spark" viewBox="0 0 48 18" role="img" aria-label="'+esc(title)+'" title="'+esc(title)+'" style="color:'+color+'"><path d="'+d+'"></path><circle class="spark-dot" cx="'+last[0].toFixed(1)+'" cy="'+last[1].toFixed(1)+'" r="1.8"></circle></svg>'
+}
+
+function setupPills(id,all,cb){
+ let el=document.getElementById(id);
+ el.innerHTML=(all?'<button class="pill active" data-pos="ALL">ALL</button>':"")+POS.map(p=>'<button class="pill" data-pos="'+p+'">'+p+'</button>').join("");
+ el.querySelectorAll(".pill").forEach(b=>b.onclick=()=>{el.querySelectorAll(".pill").forEach(x=>x.classList.remove("active"));b.classList.add("active");cb(b.dataset.pos)})
+}
+s
