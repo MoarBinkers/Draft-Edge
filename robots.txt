@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://moarbinkers.github.io/Draft-Edge/sitemap.xml
