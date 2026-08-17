@@ -12,78 +12,18 @@ html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:
 <div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">Loading your draft room…</div></div></div>
 <script>
 (async()=>{
-  const showError=(err)=>{
-    const msg=String(err&&err.message?err.message:err).replace(/[&<>]/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[s]));
-    document.body.innerHTML='<div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">The app could not start. Error:</div><div class="err">'+msg+'</div></div></div>';
-  };
-  try{
-    const files=Array.from({length:8},(_,i)=>'./app-v22-part-'+String(i).padStart(2,'0')+'.txt?v=25');
-    const parts=await Promise.all(files.map(async file=>{
-      const r=await fetch(file,{cache:'no-store'});
-      if(!r.ok)throw new Error('Could not download '+file+' (HTTP '+r.status+')');
-      return r.text();
-    }));
-    let app=parts.join('');
-
-    // Repair punctuation lost in the earlier plain-text transfer.
-    app=app.replaceAll('row.push(cell.replace(/\\r$/," ");rows.push(row)','row.push(cell.replace(/\\r$/," "));rows.push(row)');
-    app=app.replaceAll('row.push(cell.replace(/\\r$/,"" );rows.push(row)','row.push(cell.replace(/\\r$/,""));rows.push(row)');
-    app=app.replaceAll('row.push(cell.replace(/\\r$/,"" );rows.push(row)}','row.push(cell.replace(/\\r$/,""));rows.push(row)}');
-    app=app.replaceAll('row.push(cell.replace(/\\r$/,"" );rows.push(row);','row.push(cell.replace(/\\r$/,""));rows.push(row);');
-    app=app.replace(/row\.push\(cell\.replace\(\/\\r\$\/\s*,\s*""\s*\);rows\.push\(row\)/g,'row.push(cell.replace(/\\r$/,""));rows.push(row)');
-
-    // Move auth markup above the main script so startup bindings never crash.
-    const authMatch=app.match(/(<div class="auth-gate" id="authGate">[\s\S]*?<\/div>\s*<\/div>)\s*(?=<\/body>)/i);
-    if(authMatch){
-      const authBlock=authMatch[1];
-      app=app.replace(authBlock,'');
-      const mainMarker='<script>\nconst INITIAL=';
-      if(!app.includes(mainMarker))throw new Error('Could not locate Draft Edge startup script.');
-      app=app.replace(mainMarker,authBlock+'\n\n'+mainMarker);
-    }
-
-    // Always enter the full Sleeper market on a fresh page open.
-    app=app.replace('adpPos=localStorage.getItem("de_adp_pos")||adpPos;','adpPos="ALL";');
-    app=app.replace('let page=localStorage.getItem("de_last_page")||"adp";','let page="adp";');
-
-    // Load all active Sleeper-ranked QB/RB/WR/TE players and cache the pool.
-    app=app.replace('let sleeperPool=structuredClone(INITIAL).map(p=>({...p,tier:null,tags:[],note:"",drafted:false}));','let sleeperPool=JSON.parse(localStorage.getItem("de_sleeper_pool")||"null")||structuredClone(INITIAL).map(p=>({...p,tier:null,tags:[],note:"",drafted:false}));');
-    app=app.replace('https://api.sleeper.app/v1/players/nfl"','https://api.sleeper.app/v1/players/nfl?active=true"');
-    app=app.replace('if(POS.includes(x.pos)&&newPool.length<450)newPool.push(','if(POS.includes(x.pos))newPool.push(');
-    app=app.replace('sleeperPool=newPool;\n  save();','sleeperPool=newPool;\n  localStorage.setItem("de_sleeper_pool",JSON.stringify(newPool));\n  save();');
-
-    // Use a normal image asset for the logo. Do not touch drag behavior.
-    app=app.replace(/<div class="brand-mark"><img src="data:image\/webp;base64,[^"]+"/,
-      '<div class="brand-mark"><img src="./assets/draft-edge-logo.webp?v=25"');
-
-    // Plain-English Draft ID help only. Keep the working Draft-ID connection logic untouched.
-    app=app.replace(
-      '<input class="search" id="draftId" placeholder="Sleeper draft ID" style="max-width:270px">',
-      '<input class="search" id="draftId" placeholder="Paste Sleeper Draft ID" style="max-width:300px">'
-    );
-    app=app.replace(
-      '<div class="small" id="draftState" style="margin:-18px 0 20px">Not connected</div>',
-      '<div class="small" style="margin:-18px 0 8px"><b>Where to get it:</b> Real or mock draft → open it in Sleeper → Share/Invite → Copy Draft Link. The long number in that link is the Draft ID. Paste just that number above.</div><div class="small" id="draftState" style="margin:0 0 20px">Not connected</div>'
-    );
-
-    // Global close-button fallback.
-    const closeAnchor='document.getElementById("drawer").addEventListener("mousedown",e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove("open")});';
-    if(app.includes(closeAnchor)){
-      app=app.replace(closeAnchor,closeAnchor+'\n\ndocument.addEventListener("click",e=>{let x=e.target.closest("button.close");if(!x)return;e.preventDefault();e.stopPropagation();let modal=x.closest(".modal");if(modal)modal.classList.remove("open");let drawer=x.closest(".drawer");if(drawer)drawer.classList.remove("open");let side=x.closest(".left-drawer");if(side)side.classList.remove("open");if(x.id==="closeTagDrawer"){document.getElementById("tagDrawer")?.classList.remove("open");document.getElementById("tagDrawerBackdrop")?.classList.remove("open")}});');
-    }
-
-    if(!app.startsWith('<!doctype html>')||!app.includes('DRAFT EDGE')||!app.includes('DRAFT_EDGE_SUPABASE_URL')||!app.trim().endsWith('</html>')){
-      throw new Error('One of the app files was incomplete.');
-    }
-
-    const scripts=[...app.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
-      .map(m=>m[1]).filter(code=>code.trim());
-    for(const code of scripts){
-      try{new Function(code)}catch(e){throw new Error('App JavaScript syntax error: '+e.message)}
-    }
-
-    document.open();document.write(app);document.close();
-  }catch(err){showError(err);console.error(err)}
+ const fail=e=>{const m=String(e?.message||e).replace(/[&<>]/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[s]));document.body.innerHTML='<div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">The app could not start.</div><div class="err">'+m+'</div></div></div>'};
+ try{
+  if(!("DecompressionStream" in window))throw new Error("Your browser needs an update to open Draft Edge.");
+  const r=await fetch("./app-v28.bin?v=28",{cache:"no-store"});
+  if(!r.ok)throw new Error("Could not load Draft Edge (HTTP "+r.status+").");
+  const text=await new Response(r.body.pipeThrough(new DecompressionStream("gzip"))).text();
+  const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text));
+  const hash=[...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,"0")).join("");
+  if(hash!=="77a31b87341147e99b00dbe40a23961addc39723cb8464129cc3c68a13db0879")throw new Error("Draft Edge file integrity check failed.");
+  if(!text.startsWith("<!doctype html>")||!text.includes("DRAFT_EDGE_SUPABASE_URL")||!text.trim().endsWith("</html>"))throw new Error("Draft Edge file was incomplete.");
+  document.open();document.write(text);document.close();
+ }catch(e){console.error(e);fail(e)}
 })();
 </script>
 </body>
