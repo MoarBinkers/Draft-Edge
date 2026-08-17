@@ -34,7 +34,7 @@ html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:
   const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
   if(hash!=="77a31b87341147e99b00dbe40a23961addc39723cb8464129cc3c68a13db0879")throw new Error("Draft Edge integrity check failed.");
   if(!text.startsWith("<!doctype html>")||!text.includes("DRAFT_EDGE_SUPABASE_URL")||!text.trim().endsWith("</html>"))throw new Error("Draft Edge app file was incomplete.");
-  const patchTags="<scr"+"ipt src=\"./patch-v29.js?v=29\"></scr"+"ipt><scr"+"ipt src=\"./logo-fix-v291.js?v=291\"></scr"+"ipt><scr"+"ipt src=\"./tier-v31.js?v=31\"></scr"+"ipt></body>";
+  const patchTags="<scr"+"ipt src=\"./patch-v29.js?v=29\"></scr"+"ipt><scr"+"ipt src=\"./logo-fix-v291.js?v=291\"></scr"+"ipt><scr"+"ipt src=\"./tier-v32.js?v=32\"></scr"+"ipt></body>";
   const app=text.replace("</body>",patchTags);
   document.open();document.write(app);document.close();
  }catch(e){console.error(e);fail(e)}
