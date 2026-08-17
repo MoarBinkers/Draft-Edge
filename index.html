@@ -17,7 +17,7 @@ html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:
     document.body.innerHTML='<div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">The app could not start. Error:</div><div class="err">'+msg+'</div></div></div>';
   };
   try{
-    const files=Array.from({length:8},(_,i)=>'./app-v22-part-'+String(i).padStart(2,'0')+'.txt?v=25');
+    const files=Array.from({length:8},(_,i)=>'./app-v22-part-'+String(i).padStart(2,'0')+'.txt?v=26');
     const parts=await Promise.all(files.map(async file=>{
       const r=await fetch(file,{cache:'no-store'});
       if(!r.ok)throw new Error('Could not download '+file+' (HTTP '+r.status+')');
@@ -54,7 +54,53 @@ html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:
 
     // Use a normal image asset for the logo. Do not touch drag behavior.
     app=app.replace(/<div class="brand-mark"><img src="data:image\/webp;base64,[^"]+"/,
-      '<div class="brand-mark"><img src="./assets/draft-edge-logo.webp?v=25"');
+      '<div class="brand-mark"><img src="./assets/draft-edge-logo.webp?v=26"');
+
+    // Make Live Draft setup self-explanatory and accept links, Draft IDs, or League IDs.
+    app=app.replace(
+      '<input class="search" id="draftId" placeholder="Sleeper draft ID" style="max-width:270px">',
+      '<input class="search" id="draftId" placeholder="Paste Sleeper draft link, Draft ID, or League ID" style="max-width:390px">'
+    );
+    app=app.replace(
+      '<div class="small" id="draftState" style="margin:-18px 0 20px">Not connected</div>',
+      '<div class="small" style="margin:-18px 0 8px"><b>How to connect:</b> In Sleeper, open your draft or mock → Share/Invite → Copy Draft Link → paste it above. You can also paste a Draft ID or League ID.</div><div class="small" id="draftState" style="margin:0 0 20px">Not connected</div>'
+    );
+    const oldPollDraft=`async function pollDraft(){
+ let id=document.getElementById("draftId").value.trim();if(!id)return;
+ try{
+  let picks=await sleeper("https://api.sleeper.app/v1/draft/"+id+"/picks"),ids=new Set(picks.map(x=>String(x.player_id)));
+  players.forEach(p=>{let mid=marketFor(p)?.id;if(mid&&ids.has(String(mid))){if(!p.drafted)p.draftedAt=Date.now();p.drafted=true}});
+  save();renderTagDrawer();renderDraft();document.getElementById("draftState").textContent="● LIVE · "+picks.length+" picks · "+new Date().toLocaleTimeString()
+ }catch(e){document.getElementById("draftState").textContent="Connection error: "+e.message}
+}`;
+    const newPollDraft=`async function resolveSleeperDraftId(raw){
+ let match=raw.match(/\/draft\/nfl\/(\d{12,})/i);
+ let id=match?match[1]:((raw.match(/\b\d{12,}\b/)||[])[0]);
+ if(!id)throw new Error("Paste a Sleeper draft link, Draft ID, or League ID");
+ let input=document.getElementById("draftId");
+ if(input.dataset.source===raw&&input.dataset.resolved)return input.dataset.resolved;
+ try{
+  let draft=await sleeper("https://api.sleeper.app/v1/draft/"+id);
+  let resolved=String(draft.draft_id||id);
+  input.dataset.source=raw;input.dataset.resolved=resolved;return resolved
+ }catch(firstError){
+  let drafts=await sleeper("https://api.sleeper.app/v1/league/"+id+"/drafts");
+  if(!Array.isArray(drafts)||!drafts.length)throw new Error("Could not find a Sleeper draft from that link or ID");
+  let draft=drafts.find(x=>x.status==="drafting")||drafts.find(x=>x.status==="pre_draft")||drafts[0];
+  let resolved=String(draft.draft_id);
+  input.dataset.source=raw;input.dataset.resolved=resolved;return resolved
+ }
+}
+async function pollDraft(){
+ let raw=document.getElementById("draftId").value.trim();if(!raw)return;
+ try{
+  let id=await resolveSleeperDraftId(raw);
+  let picks=await sleeper("https://api.sleeper.app/v1/draft/"+id+"/picks"),ids=new Set(picks.map(x=>String(x.player_id)));
+  players.forEach(p=>{let mid=marketFor(p)?.id;if(mid&&ids.has(String(mid))){if(!p.drafted)p.draftedAt=Date.now();p.drafted=true}});
+  save();renderTagDrawer();renderDraft();document.getElementById("draftState").textContent="● LIVE · "+picks.length+" picks · "+new Date().toLocaleTimeString()
+ }catch(e){document.getElementById("draftState").textContent="Connection error: "+e.message}
+}`;
+    if(app.includes(oldPollDraft))app=app.replace(oldPollDraft,newPollDraft);
 
     // Global close-button fallback.
     const closeAnchor='document.getElementById("drawer").addEventListener("mousedown",e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove("open")});';
