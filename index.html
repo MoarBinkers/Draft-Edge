@@ -5,23 +5,28 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Draft Edge</title>
 <style>
-html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.loading{min-height:100vh;display:grid;place-items:center}.box{text-align:center}.mark{font-size:28px;font-weight:1000;letter-spacing:-.04em}.sub{margin-top:8px;color:#8d9baa;font-size:12px}
+html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.loading{min-height:100vh;display:grid;place-items:center;padding:24px}.box{text-align:center;max-width:620px}.mark{font-size:28px;font-weight:1000;letter-spacing:-.04em}.sub{margin-top:8px;color:#8d9baa;font-size:12px;line-height:1.55}.err{margin-top:12px;padding:10px 12px;border:1px solid #4a3340;border-radius:10px;background:#1c141a;color:#f3b6c2;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 </head>
 <body>
 <div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">Loading your draft room…</div></div></div>
 <script>
 (async()=>{
   try{
-    const b64=await fetch('draft-edge-v21.payload?v=21').then(r=>{if(!r.ok)throw new Error('App payload not found');return r.text()});
-    const raw=atob(b64.trim());
+    if(!window.pako) throw new Error('Loader library did not load');
+    const res=await fetch('./draft-edge-v21.payload?v=22',{cache:'no-store'});
+    if(!res.ok) throw new Error('App file could not be downloaded (HTTP '+res.status+')');
+    const b64=(await res.text()).trim();
+    if(!b64) throw new Error('App file was empty');
+    const raw=atob(b64);
     const bytes=new Uint8Array(raw.length);
-    for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
-    const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-    const app=await new Response(stream).text();
+    for(let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
+    const app=pako.ungzip(bytes,{to:'string'});
+    if(!app.includes('<html') && !app.includes('<!doctype')) throw new Error('App file did not decode correctly');
     document.open();document.write(app);document.close();
   }catch(err){
-    document.body.innerHTML='<div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">Could not load the app. Refresh the page.</div></div></div>';
+    document.body.innerHTML='<div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">The app failed to load. This message tells us exactly what broke:</div><div class="err">'+String(err && err.message ? err.message : err).replace(/[&<>]/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[s]))+'</div></div></div>';
     console.error(err);
   }
 })();
