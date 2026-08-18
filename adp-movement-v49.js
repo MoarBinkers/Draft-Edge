@@ -54,6 +54,14 @@
     });
   }
 
+  function paintStatus(){
+    const el=document.getElementById('adpStatus');if(!el)return;
+    const t=el.textContent||'';
+    if(/moved in the latest .* update/i.test(t)||/No .* rank changes in the latest central update/i.test(t)){
+      el.textContent='ADP Change keeps each player’s latest real Sleeper rank move until that player moves again.';
+    }
+  }
+
   function paintAll(){
     if(painting)return;painting=true;
     try{
@@ -61,6 +69,7 @@
       paintPersonalRows('rankList');
       paintPersonalRows('draftList');
       paintMarketRows();
+      paintStatus();
     }finally{painting=false}
   }
   function schedulePaint(){
