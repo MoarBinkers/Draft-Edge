@@ -17,11 +17,11 @@
     const style=document.createElement('style');
     style.id='workhorse-brand-style';
     style.textContent=`
-      .brand-lockup{display:flex!important;justify-content:center!important;align-items:center!important;margin:0 0 22px!important;padding:0!important;min-height:0!important}
+      .brand-lockup{display:flex!important;justify-content:center!important;align-items:center!important;margin:0 0 10px!important;padding:0!important;min-height:0!important}
       .brand-lockup-inner{width:100%!important;display:flex!important;justify-content:center!important;align-items:center!important;gap:0!important}
-      .workhorse-main-lockup{width:min(560px,50vw);max-width:560px;display:flex;justify-content:center;align-items:center;margin:0 auto;background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important}
-      .workhorse-main-lockup img{display:block;width:82%!important;height:auto;object-fit:contain;border:0!important;outline:0!important;border-radius:0;background:transparent!important;box-shadow:none!important;mix-blend-mode:lighten}
-      @media(max-width:1360px){.workhorse-main-lockup{width:min(500px,48vw)}.workhorse-main-lockup img{width:82%!important}}
+      .workhorse-main-lockup{width:360px!important;max-width:360px!important;display:flex;justify-content:center;align-items:center;margin:0 auto;background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important}
+      .workhorse-main-lockup img{display:block;width:100%!important;height:auto!important;object-fit:contain;border:0!important;outline:0!important;border-radius:0;background:transparent!important;box-shadow:none!important;mix-blend-mode:lighten}
+      @media(max-width:1360px){.workhorse-main-lockup{width:330px!important;max-width:330px!important}}
     `;
     document.head.appendChild(style);
   }
