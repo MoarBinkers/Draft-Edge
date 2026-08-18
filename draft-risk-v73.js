@@ -1,4 +1,4 @@
-// v73 — Draft risk labels, no probability, no ADP Change column, prominent position tabs.
+// v73.2 — Draft risk labels, no probability, no ADP Change column, position tabs directly above players.
 (()=>{
   const $=id=>document.getElementById(id);
   let lastSig='';
@@ -29,7 +29,7 @@
       #page-draft .colheads.rankings,
       #page-draft .player.rankings{grid-template-columns:minmax(340px,1fr) 92px 96px 96px 88px!important}
 
-      #page-draft #draftPills{order:-1;display:flex!important;align-items:center;gap:4px!important;flex-wrap:nowrap;padding:4px;border:1px solid #2b3d4b;border-radius:11px;background:#0e161e}
+      #page-draft #draftPills{display:flex!important;align-items:center;gap:4px!important;flex-wrap:nowrap;width:max-content;max-width:100%;margin:2px 0 8px;padding:4px;border:1px solid #2b3d4b;border-radius:11px;background:#0e161e}
       #page-draft #draftPills .pill{min-width:48px;padding:7px 11px!important;border:0!important;border-radius:8px!important;background:transparent!important;color:#8999a7!important;font-size:10px!important;font-weight:950!important;cursor:pointer}
       #page-draft #draftPills .pill:hover{color:#dce7ef!important;background:#17232d!important}
       #page-draft #draftPills .pill.active{color:#eef6fb!important;background:#243645!important;box-shadow:inset 0 0 0 1px #45647b}
@@ -103,11 +103,14 @@
   }
 
   function ensurePositionTabs(){
-    const root=$('draftPills');if(!root)return false;
+    const root=$('draftPills'),list=$('draftList');if(!root)return false;
     const positions=['ALL','QB','RB','WR','TE'];
     if(root.querySelectorAll('.pill').length!==positions.length){
       root.innerHTML=positions.map(pos=>'<button class="pill" type="button" data-pos="'+pos+'">'+pos+'</button>').join('');
     }
+    // Keep the position controls attached to the players, not up with Sleeper connection controls.
+    if(list?.parentNode&&root.nextElementSibling!==list)list.parentNode.insertBefore(root,list);
+
     let active='ALL';
     try{active=String(localStorage.getItem('de_draft_pos')||draftPos||'ALL')}catch(_){active=String(localStorage.getItem('de_draft_pos')||'ALL')}
     if(!positions.includes(active))active='ALL';
