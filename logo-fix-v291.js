@@ -1,5 +1,83 @@
+// Workhorse brand patch — keeps branding isolated from the core fantasy app.
 (()=>{
-  const LOGO="data:image/webp;base64,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";
-  const apply=()=>{const img=document.querySelector('.brand-mark img');if(!img)return false;img.src=LOGO;img.style.visibility='visible';return true};
-  if(!apply()){const o=new MutationObserver(()=>{if(apply())o.disconnect()});o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>o.disconnect(),5000)}
+  const BRAND='Workhorse';
+  const TITLE='Workhorse — Fantasy Analytics';
+  const PARTS=Array.from({length:8},(_,i)=>'./assets/workhorse-icon-'+i+'.txt?v=1');
+  let iconData='';
+  let applying=false;
+
+  const replaceText=v=>String(v||'').replace(/DRAFT EDGE/g,'WORKHORSE').replace(/Draft Edge/g,'Workhorse');
+
+  function updateMeta(){
+    document.title=TITLE;
+    const set=(selector,attr,value)=>{const el=document.querySelector(selector);if(el)el.setAttribute(attr,value)};
+    set('meta[name="description"]','content','Workhorse is a fantasy football analytics tool for custom rankings, player news, Sleeper market comparison, ADP movement, and live drafts.');
+    set('meta[property="og:site_name"]','content','Workhorse Fantasy Analytics');
+    set('meta[property="og:title"]','content',TITLE);
+    set('meta[property="og:description"]','content','Fantasy football analytics, rankings, player news, market movement, and live draft tools.');
+    set('meta[name="twitter:title"]','content',TITLE);
+    set('meta[name="twitter:description"]','content','Fantasy football analytics, rankings, player news, market movement, and live draft tools.');
+    document.querySelectorAll('meta[property="og:image"],meta[name="twitter:image"]').forEach(x=>x.remove());
+    const ld=document.querySelector('script[type="application/ld+json"]');
+    if(ld){
+      try{
+        const data=JSON.parse(ld.textContent||'{}');
+        data.name='Workhorse Fantasy Analytics';
+        data.description='Fantasy football analytics for rankings, player news, market movement, and live drafts.';
+        ld.textContent=JSON.stringify(data);
+      }catch(_){}
+    }
+  }
+
+  function replaceVisibleBrand(){
+    if(!document.body)return;
+    const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode(node){
+      const p=node.parentElement;
+      if(!p||/^(SCRIPT|STYLE|TEXTAREA|NOSCRIPT)$/.test(p.tagName))return NodeFilter.FILTER_REJECT;
+      return /Draft Edge|DRAFT EDGE/.test(node.nodeValue||'')?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;
+    }});
+    const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+    nodes.forEach(node=>{node.nodeValue=replaceText(node.nodeValue)});
+    document.querySelectorAll('[title],[aria-label],[alt],[placeholder]').forEach(el=>{
+      ['title','aria-label','alt','placeholder'].forEach(attr=>{
+        if(el.hasAttribute(attr)&&/Draft Edge|DRAFT EDGE/.test(el.getAttribute(attr)||''))el.setAttribute(attr,replaceText(el.getAttribute(attr)));
+      });
+    });
+  }
+
+  function applyIcon(){
+    if(!iconData)return false;
+    const img=document.querySelector('.brand-mark img');
+    if(img){
+      img.src=iconData;
+      img.alt='Workhorse';
+      img.style.visibility='visible';
+      img.style.objectFit='contain';
+    }
+    let favicon=document.querySelector('link[rel~="icon"]');
+    if(!favicon){favicon=document.createElement('link');favicon.rel='icon';document.head.appendChild(favicon)}
+    favicon.href=iconData;
+    return !!img;
+  }
+
+  function apply(){
+    if(applying)return;
+    applying=true;
+    try{updateMeta();replaceVisibleBrand();applyIcon()}finally{applying=false}
+  }
+
+  async function loadIcon(){
+    try{
+      const responses=await Promise.all(PARTS.map(p=>fetch(p,{cache:'no-store'})));
+      if(responses.some(r=>!r.ok))throw new Error('Workhorse icon part unavailable');
+      const chunks=await Promise.all(responses.map(r=>r.text()));
+      iconData='data:image/webp;base64,'+chunks.join('').replace(/\s+/g,'');
+      apply();
+    }catch(e){console.warn('Workhorse brand icon unavailable',e)}
+  }
+
+  apply();
+  loadIcon();
+  const observer=new MutationObserver(()=>apply());
+  observer.observe(document.documentElement,{childList:true,subtree:true});
 })();
