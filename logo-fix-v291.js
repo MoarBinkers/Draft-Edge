@@ -108,13 +108,14 @@
     return 'data:image/webp;base64,'+chunks.join('').replace(/\s+/g,'');
   }
 
+  // Apply branding at startup only. Do not observe the full app DOM: player drag/drop
+  // intentionally moves list nodes around and must not trigger branding work mid-drag.
   apply();
   Promise.all([loadData(ICON_PARTS),loadData(MAIN_PARTS)]).then(([icon,main])=>{
     iconData=icon;
     mainLogoData=main;
     apply();
+    setTimeout(apply,250);
+    setTimeout(apply,1000);
   }).catch(e=>console.warn('Workhorse brand assets unavailable',e));
-
-  const observer=new MutationObserver(()=>apply());
-  observer.observe(document.documentElement,{childList:true,subtree:true});
 })();
