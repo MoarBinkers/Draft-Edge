@@ -17,11 +17,11 @@
     const style=document.createElement('style');
     style.id='workhorse-brand-style';
     style.textContent=`
-      .brand-lockup{display:flex!important;justify-content:center!important;align-items:center!important;margin:0 0 22px!important;padding:0!important;min-height:0!important}
-      .brand-lockup-inner{width:100%!important;display:flex!important;justify-content:center!important;align-items:center!important;gap:0!important}
-      .workhorse-main-lockup{width:min(560px,50vw);max-width:560px;display:flex;justify-content:center;align-items:center;margin:0 auto;filter:drop-shadow(0 16px 28px #00000042)}
-      .workhorse-main-lockup img{display:block;width:100%;height:auto;object-fit:contain;border:0;border-radius:0;background:transparent}
-      @media(max-width:1360px){.workhorse-main-lockup{width:min(500px,48vw)}}
+      .brand-lockup{display:flex!important;justify-content:center!important;align-items:center!important;margin:0 0 18px!important;padding:0!important;min-height:0!important;border-color:transparent!important;background:transparent!important;box-shadow:none!important}
+      .brand-lockup-inner{width:100%!important;display:flex!important;justify-content:center!important;align-items:center!important;gap:0!important;border-color:transparent!important;background:transparent!important;box-shadow:none!important}
+      .workhorse-main-lockup{width:min(455px,42vw);max-width:455px;display:flex;justify-content:center;align-items:center;margin:0 auto;background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important}
+      .workhorse-main-lockup img{display:block;width:100%;height:auto;object-fit:contain;border:0!important;outline:0!important;border-radius:0;background:transparent!important;box-shadow:none!important;-webkit-mask-image:radial-gradient(ellipse at center,#000 82%,rgba(0,0,0,.96) 90%,transparent 100%);mask-image:radial-gradient(ellipse at center,#000 82%,rgba(0,0,0,.96) 90%,transparent 100%)}
+      @media(max-width:1360px){.workhorse-main-lockup{width:min(420px,40vw)}}
     `;
     document.head.appendChild(style);
   }
