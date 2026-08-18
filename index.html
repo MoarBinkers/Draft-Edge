@@ -3,35 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Draft Edge — Fantasy Football Rankings & Draft Tool</title>
-<meta name="description" content="Draft Edge is a fantasy football ranking and live draft tool for comparing your player rankings with Sleeper market ranks, tracking ADP movement, building tiers, and drafting from your own list.">
+<title>Workhorse — Fantasy Analytics</title>
+<meta name="description" content="Workhorse is a fantasy football analytics tool for custom rankings, player news, Sleeper market comparison, ADP movement, and live drafts.">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <link rel="canonical" href="https://moarbinkers.github.io/Draft-Edge/">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Draft Edge">
-<meta property="og:title" content="Draft Edge — Fantasy Football Rankings & Draft Tool">
-<meta property="og:description" content="Build your own fantasy football rankings, compare them with Sleeper market ranks, track ADP movement, create tiers, and use your list during live drafts.">
+<meta property="og:site_name" content="Workhorse Fantasy Analytics">
+<meta property="og:title" content="Workhorse — Fantasy Analytics">
+<meta property="og:description" content="Fantasy football analytics, rankings, player news, market movement, and live draft tools.">
 <meta property="og:url" content="https://moarbinkers.github.io/Draft-Edge/">
-<meta property="og:image" content="https://moarbinkers.github.io/Draft-Edge/assets/draft-edge-logo.webp">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Draft Edge — Fantasy Football Rankings & Draft Tool">
-<meta name="twitter:description" content="Fantasy football rankings, Sleeper market comparison, ADP tracking, tiers, and live draft tools.">
-<meta name="twitter:image" content="https://moarbinkers.github.io/Draft-Edge/assets/draft-edge-logo.webp">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Draft Edge","url":"https://moarbinkers.github.io/Draft-Edge/","applicationCategory":"SportsApplication","operatingSystem":"Web","description":"Fantasy football ranking and live draft tool for personal rankings, Sleeper market comparison, ADP movement, tiers, and live drafts."}</script>
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Workhorse — Fantasy Analytics">
+<meta name="twitter:description" content="Fantasy football analytics, rankings, player news, market movement, and live draft tools.">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Workhorse Fantasy Analytics","url":"https://moarbinkers.github.io/Draft-Edge/","applicationCategory":"SportsApplication","operatingSystem":"Web","description":"Fantasy football analytics for rankings, player news, market movement, and live drafts."}</script>
 <style>
 html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}.loading{min-height:100vh;display:grid;place-items:center;padding:24px}.box{text-align:center;max-width:720px}.mark{font-size:30px;font-weight:1000;letter-spacing:-.04em}.sub{margin-top:8px;color:#8d9baa;font-size:13px;line-height:1.55}.err{margin-top:14px;padding:12px 14px;border:1px solid #4a3340;border-radius:10px;background:#1c141a;color:#f3b6c2;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}
 </style>
 </head>
 <body>
-<div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">Loading your draft room…</div></div></div>
+<div class="loading"><div class="box"><div class="mark">WORKHORSE</div><div class="sub">Loading Fantasy Analytics…</div></div></div>
 <script>
 (async()=>{
  const fail=e=>{
   const m=String(e&&e.message?e.message:e).replace(/[&<>]/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[s]));
-  document.body.innerHTML='<div class="loading"><div class="box"><div class="mark">DRAFT EDGE</div><div class="sub">The app could not start.</div><div class="err">'+m+'</div></div></div>';
+  document.body.innerHTML='<div class="loading"><div class="box"><div class="mark">WORKHORSE</div><div class="sub">The app could not start.</div><div class="err">'+m+'</div></div></div>';
  };
  try{
-  if(!("DecompressionStream" in window))throw new Error("Your browser needs an update to open Draft Edge.");
+  if(!("DecompressionStream" in window))throw new Error("Your browser needs an update to open Workhorse.");
   const files=Array.from({length:10},(_,i)=>'./app-v28-part-'+String(i).padStart(2,'0')+'.bin?v=28b');
   const buffers=await Promise.all(files.map(async file=>{
    const r=await fetch(file,{cache:"no-store"});
@@ -39,16 +37,16 @@ html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:
    return new Uint8Array(await r.arrayBuffer());
   }));
   const total=buffers.reduce((n,b)=>n+b.length,0);
-  if(total!==28016)throw new Error("Draft Edge bundle was incomplete ("+total+" bytes).");
+  if(total!==28016)throw new Error("Workhorse bundle was incomplete ("+total+" bytes).");
   const joined=new Uint8Array(total);
   let offset=0;
   for(const b of buffers){joined.set(b,offset);offset+=b.length}
   const text=await new Response(new Blob([joined]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
   const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text));
   const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
-  if(hash!=="77a31b87341147e99b00dbe40a23961addc39723cb8464129cc3c68a13db0879")throw new Error("Draft Edge integrity check failed.");
-  if(!text.startsWith("<!doctype html>")||!text.includes("DRAFT_EDGE_SUPABASE_URL")||!text.trim().endsWith("</html>"))throw new Error("Draft Edge app file was incomplete.");
-  const patchTags="<scr"+"ipt src=\"./patch-v29.js?v=29\"></scr"+"ipt><scr"+"ipt src=\"./logo-fix-v291.js?v=291\"></scr"+"ipt><scr"+"ipt src=\"./tier-v33.js?v=33\"></scr"+"ipt><scr"+"ipt src=\"./player-detail-v34.js?v=34\"></scr"+"ipt><scr"+"ipt src=\"./central-adp-v36.js?v=36\"></scr"+"ipt><scr"+"ipt src=\"./adp-copy-v361.js?v=361\"></scr"+"ipt><scr"+"ipt src=\"./rank-sync-v38.js?v=39\"></scr"+"ipt><scr"+"ipt src=\"./sleeper-update-status-v40.js?v=40\"></scr"+"ipt><scr"+"ipt src=\"./cloud-reliability-v41.js?v=41\"></scr"+"ipt><scr"+"ipt src=\"./draft-room-v41.js?v=41\"></scr"+"ipt><scr"+"ipt src=\"./reset-draft-v42.js?v=42\"></scr"+"ipt><scr"+"ipt src=\"./draft-live-v46.js?v=46\"></scr"+"ipt><scr"+"ipt src=\"./sleeper-auto-draft-v44.js?v=44\"></scr"+"ipt><scr"+"ipt src=\"./draft-ownership-v45.js?v=45\"></scr"+"ipt><scr"+"ipt src=\"./draft-intelligence-v48.js?v=48\"></scr"+"ipt><scr"+"ipt src=\"./adp-movement-v49.js?v=491\"></scr"+"ipt><scr"+"ipt src=\"./player-detail-clean-v50.js?v=501\"></scr"+"ipt><scr"+"ipt src=\"./rankings-help-v51.js?v=51\"></scr"+"ipt><scr"+"ipt src=\"./player-tags-cta-v53.js?v=53\"></scr"+"ipt><scr"+"ipt src=\"./auth-recovery-v54.js?v=54\"></scr"+"ipt><scr"+"ipt src=\"./auth-forgot-popup-v56.js?v=562\"></scr"+"ipt><scr"+"ipt src=\"./auth-password-save-v57.js?v=57\"></scr"+"ipt><scr"+"ipt src=\"./tags-safe-pick-v58.js?v=58\"></scr"+"ipt><scr"+"ipt src=\"./tags-upgrade-v59.js?v=59\"></scr"+"ipt><scr"+"ipt src=\"./new-user-adp-v60.js?v=601\"></scr"+"ipt><scr"+"ipt src=\"./decision-loader-v61.js?v=625\"></scr"+"ipt></body>";
+  if(hash!=="77a31b87341147e99b00dbe40a23961addc39723cb8464129cc3c68a13db0879")throw new Error("Workhorse integrity check failed.");
+  if(!text.startsWith("<!doctype html>")||!text.includes("DRAFT_EDGE_SUPABASE_URL")||!text.trim().endsWith("</html>"))throw new Error("Workhorse app file was incomplete.");
+  const patchTags="<scr"+"ipt src=\"./patch-v29.js?v=29\"></scr"+"ipt><scr"+"ipt src=\"./logo-fix-v291.js?v=292\"></scr"+"ipt><scr"+"ipt src=\"./tier-v33.js?v=33\"></scr"+"ipt><scr"+"ipt src=\"./player-detail-v34.js?v=34\"></scr"+"ipt><scr"+"ipt src=\"./central-adp-v36.js?v=36\"></scr"+"ipt><scr"+"ipt src=\"./adp-copy-v361.js?v=361\"></scr"+"ipt><scr"+"ipt src=\"./rank-sync-v38.js?v=39\"></scr"+"ipt><scr"+"ipt src=\"./sleeper-update-status-v40.js?v=40\"></scr"+"ipt><scr"+"ipt src=\"./cloud-reliability-v41.js?v=41\"></scr"+"ipt><scr"+"ipt src=\"./draft-room-v41.js?v=41\"></scr"+"ipt><scr"+"ipt src=\"./reset-draft-v42.js?v=42\"></scr"+"ipt><scr"+"ipt src=\"./draft-live-v46.js?v=46\"></scr"+"ipt><scr"+"ipt src=\"./sleeper-auto-draft-v44.js?v=44\"></scr"+"ipt><scr"+"ipt src=\"./draft-ownership-v45.js?v=45\"></scr"+"ipt><scr"+"ipt src=\"./draft-intelligence-v48.js?v=48\"></scr"+"ipt><scr"+"ipt src=\"./adp-movement-v49.js?v=491\"></scr"+"ipt><scr"+"ipt src=\"./player-detail-clean-v50.js?v=501\"></scr"+"ipt><scr"+"ipt src=\"./rankings-help-v51.js?v=51\"></scr"+"ipt><scr"+"ipt src=\"./player-tags-cta-v53.js?v=53\"></scr"+"ipt><scr"+"ipt src=\"./auth-recovery-v54.js?v=54\"></scr"+"ipt><scr"+"ipt src=\"./auth-forgot-popup-v56.js?v=562\"></scr"+"ipt><scr"+"ipt src=\"./auth-password-save-v57.js?v=57\"></scr"+"ipt><scr"+"ipt src=\"./tags-safe-pick-v58.js?v=58\"></scr"+"ipt><scr"+"ipt src=\"./tags-upgrade-v59.js?v=59\"></scr"+"ipt><scr"+"ipt src=\"./new-user-adp-v60.js?v=601\"></scr"+"ipt><scr"+"ipt src=\"./decision-loader-v61.js?v=625\"></scr"+"ipt></body>";
   const app=text.replace("</body>",patchTags);
   document.open();document.write(app);document.close();
  }catch(e){console.error(e);fail(e)}
