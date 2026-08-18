@@ -1,6 +1,6 @@
 // v61 feature loader — each decision-support feature is isolated so one failure cannot stop the others.
 (()=>{
-  const files=['./round-bands-v61.js?v=611','./smart-search-v62.js?v=621','./player-compare-v63.js?v=631','./edge-heat-v64.js?v=641','./draft-recap-v66.js?v=661'];
+  const files=['./round-bands-v61.js?v=611','./smart-search-v62.js?v=621','./player-compare-v63.js?v=631','./edge-heat-v64.js?v=641','./draft-recap-v65.js?v=652','./draft-recap-trigger-v66.js?v=661'];
   const loadOne=src=>new Promise(resolve=>{
     try{
       const s=document.createElement('script');
