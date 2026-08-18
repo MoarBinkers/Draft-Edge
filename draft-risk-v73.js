@@ -1,4 +1,4 @@
-// v73.3 — Draft risk labels, clean Draft columns, position tabs above players, no duplicate Target/Avoid filters.
+// v73.4 — Draft risk labels, clean Draft columns, position tabs above players, no duplicate tag or injury smart filters.
 (()=>{
   const $=id=>document.getElementById(id);
   let lastSig='';
@@ -13,9 +13,10 @@
       #page-draft .de70-chance,
       #page-draft #deDraftIntel48>.de48-panel:nth-child(2){display:none!important}
 
-      /* Target/Avoid already exist as tag controls; hide the duplicate smart-filter pair. */
+      /* These Draft smart filters are redundant/unneeded in the streamlined Draft view. */
       #page-draft #deDraftSmartFilters [data-smart="target"],
-      #page-draft #deDraftSmartFilters [data-smart="avoid"]{display:none!important}
+      #page-draft #deDraftSmartFilters [data-smart="avoid"],
+      #page-draft #deDraftSmartFilters [data-smart="injured"]{display:none!important}
 
       .de73-risk{display:none}
       #page-draft .de73-risk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px}
@@ -132,15 +133,15 @@
     return true;
   }
 
-  function removeDuplicateTagSmartFilters(){
+  function removeUnusedSmartFilters(){
     const root=$('deDraftSmartFilters');if(!root)return;
-    const dup=[...root.querySelectorAll('[data-smart="target"],[data-smart="avoid"]')];
-    const activeDup=dup.find(x=>x.classList.contains('active'));
-    if(activeDup){
+    const hidden=[...root.querySelectorAll('[data-smart="target"],[data-smart="avoid"],[data-smart="injured"]')];
+    const activeHidden=hidden.find(x=>x.classList.contains('active'));
+    if(activeHidden){
       const all=root.querySelector('[data-smart="all"]');
       if(all)all.click();
     }
-    dup.forEach(x=>x.style.display='none');
+    hidden.forEach(x=>x.style.display='none');
   }
 
   function cleanDraftHeaders(){
@@ -152,10 +153,10 @@
   }
 
   function renderNow(){
-    installCss();ensurePositionTabs();removeDuplicateTagSmartFilters();
+    installCss();ensurePositionTabs();removeUnusedSmartFilters();
     if(!installIntoCardBuilder())return;
     try{if(typeof window.renderDraft==='function')window.renderDraft()}catch(e){console.warn('Draft risk v73 render failed',e)}
-    ensurePositionTabs();removeDuplicateTagSmartFilters();cleanDraftHeaders();
+    ensurePositionTabs();removeUnusedSmartFilters();cleanDraftHeaders();
   }
 
   function signature(){
@@ -169,7 +170,7 @@
   }
 
   function sync(force=false){
-    installCss();installIntoCardBuilder();ensurePositionTabs();removeDuplicateTagSmartFilters();
+    installCss();installIntoCardBuilder();ensurePositionTabs();removeUnusedSmartFilters();
     const sig=signature();
     if(force||sig!==lastSig){lastSig=sig;renderNow()}
   }
