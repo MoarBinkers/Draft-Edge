@@ -74,3 +74,12 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('deForgot56')?.classList.contains('open'))close()});
   ensure();window.DraftEdgeForgotPassword={open,close,send};
 })();
+
+// Load password-manager semantics after the auth UI exists.
+(()=>{
+  if(document.querySelector('script[data-de-password-save57]'))return;
+  const s=document.createElement('script');
+  s.src='./auth-password-save-v57.js?v=57';
+  s.dataset.dePasswordSave57='1';
+  document.head.appendChild(s);
+})();
