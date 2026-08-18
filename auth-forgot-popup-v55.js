@@ -130,7 +130,7 @@
       input?.focus();
       return;
     }
-    if(!window.supabaseClient){
+    if(typeof supabaseClient==='undefined'||!supabaseClient){
       setMessage('Account service is still loading. Try again in a moment.','err');
       return;
     }
@@ -142,7 +142,7 @@
     setMessage('Sending your recovery email…');
 
     try{
-      const {error}=await window.supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:LIVE_URL});
+      const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:LIVE_URL});
       if(error)throw error;
       const main=byId('authEmail');if(main)main.value=email;
       byId('deForgot55')?.classList.add('sent');
