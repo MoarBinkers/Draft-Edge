@@ -1,6 +1,5 @@
 // Workhorse brand patch — keeps branding isolated from the core fantasy app.
 (()=>{
-  const BRAND='Workhorse';
   const TITLE='Workhorse — Fantasy Analytics';
   const PARTS=Array.from({length:8},(_,i)=>'./assets/workhorse-icon-'+i+'.txt?v=1');
   let iconData='';
@@ -9,8 +8,8 @@
   const replaceText=v=>String(v||'').replace(/DRAFT EDGE/g,'WORKHORSE').replace(/Draft Edge/g,'Workhorse');
 
   function updateMeta(){
-    document.title=TITLE;
-    const set=(selector,attr,value)=>{const el=document.querySelector(selector);if(el)el.setAttribute(attr,value)};
+    if(document.title!==TITLE)document.title=TITLE;
+    const set=(selector,attr,value)=>{const el=document.querySelector(selector);if(el&&el.getAttribute(attr)!==value)el.setAttribute(attr,value)};
     set('meta[name="description"]','content','Workhorse is a fantasy football analytics tool for custom rankings, player news, Sleeper market comparison, ADP movement, and live drafts.');
     set('meta[property="og:site_name"]','content','Workhorse Fantasy Analytics');
     set('meta[property="og:title"]','content',TITLE);
@@ -22,9 +21,11 @@
     if(ld){
       try{
         const data=JSON.parse(ld.textContent||'{}');
-        data.name='Workhorse Fantasy Analytics';
-        data.description='Fantasy football analytics for rankings, player news, market movement, and live drafts.';
-        ld.textContent=JSON.stringify(data);
+        let changed=false;
+        if(data.name!=='Workhorse Fantasy Analytics'){data.name='Workhorse Fantasy Analytics';changed=true}
+        const desc='Fantasy football analytics for rankings, player news, market movement, and live drafts.';
+        if(data.description!==desc){data.description=desc;changed=true}
+        if(changed)ld.textContent=JSON.stringify(data);
       }catch(_){}
     }
   }
@@ -49,14 +50,14 @@
     if(!iconData)return false;
     const img=document.querySelector('.brand-mark img');
     if(img){
-      img.src=iconData;
-      img.alt='Workhorse';
+      if(img.src!==iconData)img.src=iconData;
+      if(img.alt!=='Workhorse')img.alt='Workhorse';
       img.style.visibility='visible';
       img.style.objectFit='contain';
     }
     let favicon=document.querySelector('link[rel~="icon"]');
     if(!favicon){favicon=document.createElement('link');favicon.rel='icon';document.head.appendChild(favicon)}
-    favicon.href=iconData;
+    if(favicon.href!==iconData)favicon.href=iconData;
     return !!img;
   }
 
