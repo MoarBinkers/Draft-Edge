@@ -1,10 +1,9 @@
-// v70 — self-contained inline chance-back estimates for the Live Draft list.
+// v70.1 — self-contained inline chance-back estimates for the Live Draft list.
 (()=>{
   const $=id=>document.getElementById(id);
   const INPUT_KEY='de34_draft_input';
   let sourceId='',draft=null,league=null,traded=[],picks=[],busy=false,timer=null,metaAt=0,decorateTimer=null;
 
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
   function ps(){try{return Array.isArray(window.players)?window.players:[]}catch(_){return []}}
   function market(p){try{return typeof window.marketFor==='function'?window.marketFor(p):null}catch(_){return null}}
@@ -107,20 +106,25 @@
     else status.innerHTML='<b>Chance to make it back</b><span class="de70-state">Current #'+cur+' → your next pick #'+target+'</span>';
 
     list.querySelectorAll(':scope > .player').forEach(row=>{
-      row.querySelectorAll('.de70-chance').forEach(x=>x.remove());
       const p=playerForRow(row);if(!p)return;
       const pct=chance(p),host=row.querySelector('.draft-insight-line')||row.querySelector('.meta')||row.querySelector('.person');if(!host)return;
-      const badge=document.createElement('span');badge.className='de70-chance '+(pct==null?'unknown':tone(pct));
+      let badge=row.querySelector('.de70-chance');
+      if(!badge){badge=document.createElement('span');badge.className='de70-chance';host.appendChild(badge)}
+      badge.className='de70-chance '+(pct==null?'unknown':tone(pct));
       badge.textContent=pct==null?'— chance back':pct+'% chance back';
-      if(target)badge.title='Estimated chance '+p.name+' is still available at your next pick (#'+target+'). Based on Sleeper market rank and the connected draft position.';
-      host.appendChild(badge);
+      badge.title=target?'Estimated chance '+p.name+' is still available at your next pick (#'+target+'). Based on Sleeper market rank and the connected draft position.':'';
     });
   }
   function scheduleDecorate(){clearTimeout(decorateTimer);decorateTimer=setTimeout(decorate,30)}
+  function wireListObserver(){
+    const list=$('draftList');if(!list||list.dataset.de70Observed)return false;
+    const ob=new MutationObserver(()=>scheduleDecorate());ob.observe(list,{childList:true,subtree:false});list.dataset.de70Observed='1';return true;
+  }
 
   async function tick(force=false){
     if(busy)return;busy=true;
     try{
+      wireListObserver();
       if(!(await resolve(force))){picks=[];decorate();return}
       const latest=await sleeperFetch('https://api.sleeper.app/v1/draft/'+draft.draft_id+'/picks');if(Array.isArray(latest))picks=latest;
       decorate();
@@ -131,7 +135,6 @@
   function start(){clearInterval(timer);tick(true);timer=setInterval(()=>tick(false),2500)}
 
   css();setTimeout(start,500);
-  const page=$('page-draft')||document.body;const ob=new MutationObserver(()=>scheduleDecorate());ob.observe(page,{childList:true,subtree:true});
   document.addEventListener('click',e=>{if(e.target.closest?.('#connectDraft'))setTimeout(()=>tick(true),350)});
   document.addEventListener('change',e=>{if(e.target?.id==='deDraftSlot')setTimeout(()=>{decorate();try{window.DraftEdgeRoundBands?.refresh?.()}catch(_){}},50)});
   window.DraftEdgeDraftProbability={refresh:()=>tick(true),chanceFor:chance,currentPick,targetPick};
