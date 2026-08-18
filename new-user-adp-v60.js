@@ -48,13 +48,23 @@
     let initial=null;
     try{initial=Array.isArray(INITIAL)?INITIAL:null}catch(_){}
     if(!initial||list.players.length!==initial.length)return false;
+    let initialTiers=null;
+    try{initialTiers=INITIAL_TIERS}catch(_){}
+    if(!initialTiers)return false;
+    for(const pos of POS){
+      const a=Array.isArray(list.tiers?.[pos])?list.tiers[pos]:[];
+      const b=Array.isArray(initialTiers?.[pos])?initialTiers[pos]:[];
+      if(a.length!==b.length)return false;
+      for(let j=0;j<b.length;j++)if(Number(a[j]?.id)!==Number(b[j]?.id)||String(a[j]?.name||'')!==String(b[j]?.name||''))return false;
+    }
     for(let i=0;i<initial.length;i++){
       const p=list.players[i],src=initial[i];
       if(!p||!src)return false;
       let same=false;
       try{same=norm(p.name)===norm(src.name)}catch(_){same=String(p.name||'').toLowerCase()===String(src.name||'').toLowerCase()}
       if(!same)return false;
-      if(Number(p.overall)!==i+1)return false;
+      if(Number(p.overall)!==i+1||String(p.position||'')!==String(src.position||''))return false;
+      if(Number(p.posRank)!==Number(src.posRank)||Number(p.tier)!==Number(src.tier))return false;
       if((p.tags||[]).length||String(p.note||'').trim()||p.drafted)return false;
     }
     return true;
