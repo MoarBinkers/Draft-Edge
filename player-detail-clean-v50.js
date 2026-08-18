@@ -78,8 +78,16 @@
     try{globalThis[name]=wrapped}catch(_){}
   }
 
+  function updateRankingsHelp(){
+    const p=document.querySelector('#page-rankings .pagehead p');
+    if(!p)return;
+    p.textContent='ALL is your overall ranking list. Position tabs show My Pos Rank. Drag a player card up or down to reorder them; moving a player between tiers only changes the visual tier, not their rank. Tiers are completely optional and only appear when you create them.';
+  }
+
   wrap('openDetail',playerForOpenDetail);
   wrap('openMarketDetail',playerForMarketDetail);
+  updateRankingsHelp();
+  [250,900,2200].forEach(ms=>setTimeout(updateRankingsHelp,ms));
 
   window.DraftEdgePlayerDetailClean={simplify:simplifyDrawer,format:currentFormat};
 })();
