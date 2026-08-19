@@ -1,4 +1,4 @@
-// v74.3 — top-of-drawer player news, Sleeper status, and news-driven fantasy outlook.
+// v74.4 — top-of-drawer player news from RotoWire, ESPN, CBS, Sleeper signals, and Workhorse impact.
 (()=>{
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
@@ -95,7 +95,7 @@
     const wrap=document.createElement('div');wrap.id='deFantasy74';wrap.className='de74-wrap';wrap.dataset.playerKey=keyFor(p.name);
     wrap.innerHTML=`
       <div class="de74-section" id="de74News">
-        <div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">ESPN · CBS · Sleeper</span></div>
+        <div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">RotoWire · ESPN · CBS · Sleeper</span></div>
         <div class="de74-loading"></div><div class="de74-loading" style="width:64%"></div>
       </div>
       <div class="de74-section" id="de74Outlook">
