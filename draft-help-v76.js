@@ -1,7 +1,6 @@
-// v76.1 — one owner for Live Draft onboarding and the current Draft Legend.
+// v76.2 — clear Live Draft onboarding and current Draft Legend.
 (()=>{
   const $=id=>document.getElementById(id);
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
 
   function css(){
     if($('whDraftHelp76Css'))return;
@@ -51,16 +50,16 @@
     const box=document.createElement('div');box.id='whDraftGuide76';
     box.innerHTML=`
       <div class="wh76-top">
-        <div><h3>How Live Draft Works</h3><div class="wh76-desc">Connect your Sleeper draft and Workhorse follows the room for you. Workhorse does <b>not</b> make picks on Sleeper — it keeps your board updated, removes drafted players, tracks your turns, and compares the live board with your rankings and Sleeper ADP.</div></div>
+        <div><h3>How Live Draft Works</h3><div class="wh76-desc">Connect your Sleeper draft and Workhorse follows the room for you. Workhorse does <b>not</b> make picks on Sleeper. It keeps your board updated, removes drafted players, tracks your turns, and compares the live board with your rankings and Sleeper ADP.</div></div>
         <span class="wh76-badge">Sleeper Live Draft</span>
       </div>
       <div class="wh76-steps">
-        <div class="wh76-step"><div class="wh76-num">1</div><div class="wh76-title">Copy your Sleeper draft</div><div class="wh76-copy">Open the draft in Sleeper. Copy the draft link. A Draft ID or League ID also works.</div></div>
-        <div class="wh76-step"><div class="wh76-num">2</div><div class="wh76-title">Paste it and connect</div><div class="wh76-copy">Paste it into the box below and press <b>Connect Sleeper</b>. Workhorse finds the draft and reads its scoring/roster settings.</div></div>
-        <div class="wh76-step"><div class="wh76-num">3</div><div class="wh76-title">Choose your draft slot</div><div class="wh76-copy">Select the number you are drafting from. This tells Workhorse which picks and roster belong to you, including snake turns.</div></div>
-        <div class="wh76-step"><div class="wh76-num">4</div><div class="wh76-title">Draft normally in Sleeper</div><div class="wh76-copy">Leave Workhorse open beside Sleeper. Picks sync automatically; drafted players disappear and your current/next pick updates as the draft moves.</div></div>
+        <div class="wh76-step"><div class="wh76-num">1</div><div class="wh76-title">Copy your Sleeper draft link</div><div class="wh76-copy">Open your draft in Sleeper. Click the <b>settings gear</b> in the draft room, then copy the <b>Draft Link</b> shown there. A numeric Draft ID or League ID also works.</div></div>
+        <div class="wh76-step"><div class="wh76-num">2</div><div class="wh76-title">Paste it and connect</div><div class="wh76-copy">Paste the link or ID into the box below and press <b>Connect Sleeper</b>. Workhorse finds the draft and reads its scoring and roster settings.</div></div>
+        <div class="wh76-step"><div class="wh76-num">3</div><div class="wh76-title">Choose your draft slot</div><div class="wh76-copy">Select the number you are drafting from. This tells Workhorse which picks and roster belong to you.</div></div>
+        <div class="wh76-step"><div class="wh76-num">4</div><div class="wh76-title">Draft normally in Sleeper</div><div class="wh76-copy">Leave Workhorse open beside Sleeper. Picks sync automatically. Drafted players disappear and your current and next pick update as the draft moves.</div></div>
       </div>
-      <div class="wh76-auto"><b>Automatic after connecting:</b> scoring format is detected, Workhorse switches to the matching Sleeper ADP format, picks refresh automatically, your roster is tracked, and Value Now / wait-risk signals use the live draft position.<div class="wh76-help-actions"><button type="button" class="wh76-help-btn" id="whOpenLegend76">Open Draft Legend</button></div></div>`;
+      <div class="wh76-auto"><b>Automatic after connecting:</b> Workhorse detects the scoring format, switches to the matching Sleeper ADP format, refreshes picks automatically, tracks your roster, and updates Value Now and wait risk signals using the live draft position.<div class="wh76-help-actions"><button type="button" class="wh76-help-btn" id="whOpenLegend76">Open Draft Legend</button></div></div>`;
     anchor.parentNode?.insertBefore(box,anchor);
     $('whOpenLegend76')?.addEventListener('click',openLegend);
   }
@@ -69,15 +68,15 @@
     css();if($('whLegend76'))return;
     const modal=document.createElement('div');modal.id='whLegend76';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Draft Legend');
     modal.innerHTML=`<div class="wh76-modal"><div class="wh76-modal-head"><h2>Draft Legend</h2><button type="button" class="wh76-close" aria-label="Close">×</button></div><div class="wh76-body">
-      <div class="wh76-intro">These signals are decision helpers, not commands. Your personal ranking stays the foundation; Sleeper ADP and the live draft tell you how much urgency or value exists around it.</div>
-      <div class="wh76-legend-row"><div class="wh76-term"><span class="wh76-green">Value Now</span></div><div class="wh76-explain"><b>Green no longer means “Green Light.”</b> A positive number means the draft has moved past where <em>you</em> ranked the player. Example: <b>+8</b> means the current pick is eight spots later than your personal overall rank. It signals value versus your board — not an automatic instruction to draft him.</div></div>
-      <div class="wh76-legend-row"><div class="wh76-term">Sleeper Rank</div><div class="wh76-explain">The current Sleeper redraft ranking/ADP for the format Workhorse is using. When a Sleeper draft is connected, Workhorse automatically switches to the detected PPR, Half PPR, or Superflex format.</div></div>
-      <div class="wh76-legend-row"><div class="wh76-term">ADP Move</div><div class="wh76-explain">Shows the player's latest real movement in Sleeper rank. Positive means the player moved up the Sleeper board; negative means he moved down.</div></div>
+      <div class="wh76-intro">These signals are decision helpers, not commands. Your personal ranking stays the foundation. Sleeper ADP and the live draft help show how much urgency or value exists around each player.</div>
+      <div class="wh76-legend-row"><div class="wh76-term"><span class="wh76-green">Value Now</span></div><div class="wh76-explain">A positive number means the draft has moved past where <em>you</em> ranked the player. Example: <b>+8</b> means the current pick is eight spots later than your personal overall rank. It signals value compared with your board. It is not an automatic instruction to draft him.</div></div>
+      <div class="wh76-legend-row"><div class="wh76-term">Sleeper Rank</div><div class="wh76-explain">The current Sleeper redraft ranking and ADP for the format Workhorse is using. When a Sleeper draft is connected, Workhorse automatically switches to the detected PPR, Half PPR, or Superflex format.</div></div>
+      <div class="wh76-legend-row"><div class="wh76-term">ADP Move</div><div class="wh76-explain">Shows the player's latest movement in Sleeper rank. Positive means the player moved up the Sleeper board. Negative means he moved down.</div></div>
       <div class="wh76-legend-row"><div class="wh76-term">Market before your next pick</div><div class="wh76-explain">Sleeper generally values the player earlier than your next turn. Waiting carries more market risk.</div></div>
       <div class="wh76-legend-row"><div class="wh76-term">Market later than your next pick</div><div class="wh76-explain">Sleeper generally values the player after your next turn. If the room cooperates, you may be able to wait instead of reaching now.</div></div>
-      <div class="wh76-legend-row"><div class="wh76-term"><span class="wh76-risk">Safe to wait / Lean wait</span></div><div class="wh76-explain">Workhorse sees limited short-term pressure before your next pick. This uses the Sleeper market, how many picks are between your turns, positional needs in the room, recent position runs, and positional drop-off.</div></div>
+      <div class="wh76-legend-row"><div class="wh76-term"><span class="wh76-risk">Safe to wait / Lean wait</span></div><div class="wh76-explain">Workhorse sees limited short term pressure before your next pick. This uses the Sleeper market, how many picks are between your turns, positional needs in the room, recent position runs, and the drop off at the position.</div></div>
       <div class="wh76-legend-row"><div class="wh76-term"><span class="wh76-red">Getting risky / High risk</span></div><div class="wh76-explain">There is meaningful evidence the player may not make it back to you. It is a risk estimate, not a guarantee that another manager will take him.</div></div>
-      <div class="wh76-legend-row"><div class="wh76-term">Injury Status</div><div class="wh76-explain"><b>Q</b> = Questionable, <b>D</b> = Doubtful, <b>OUT</b> = Out, <b>IR</b> = Injured Reserve, <b>PUP</b> = Physically Unable to Perform, and <b>SUS</b> = Suspended. These come from the current Sleeper player-status data.</div></div>
+      <div class="wh76-legend-row"><div class="wh76-term">Injury Status</div><div class="wh76-explain"><b>Q</b> means Questionable, <b>D</b> means Doubtful, <b>OUT</b> means Out, <b>IR</b> means Injured Reserve, <b>PUP</b> means Physically Unable to Perform, and <b>SUS</b> means Suspended. These come from current Sleeper player status data.</div></div>
       <div class="wh76-legend-row"><div class="wh76-term">Your tags</div><div class="wh76-explain">Target, Avoid, Safe Pick, Risk, Sleeper, Breakout, and Hesitant are your own labels. They never change a player's Sleeper ADP or automatically move your ranking.</div></div>
     </div></div>`;
     document.body.appendChild(modal);
@@ -88,7 +87,6 @@
   function closeLegend(){$('whLegend76')?.classList.remove('open')}
 
   function replaceOldGreenLightCopy(){
-    // One-time text cleanup only; no observer, rerender, or DOM movement during dragging.
     const roots=[$('page-draft'),...document.querySelectorAll('.modal')].filter(Boolean);
     for(const root of roots){
       const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
