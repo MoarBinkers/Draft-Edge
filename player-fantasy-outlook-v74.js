@@ -1,4 +1,4 @@
-// v74.2 — player drawer fantasy outlook driven by recent cached news.
+// v74.3 — top-of-drawer player news, Sleeper status, and news-driven fantasy outlook.
 (()=>{
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
@@ -7,16 +7,20 @@
   function installCss(){
     if($('de74Css'))return;
     const s=document.createElement('style');s.id='de74Css';s.textContent=`
-      #drawerContent .de74-wrap{margin-top:15px}
+      #drawerContent .de74-wrap{margin:12px 0 0}
       #drawerContent .de74-section{border:1px solid #293946;background:#0f171f;border-radius:13px;padding:13px;margin-top:10px}
+      #drawerContent .de74-section:first-child{margin-top:0}
       #drawerContent .de74-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
       #drawerContent .de74-head h3{margin:0;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#91a3b2}
       #drawerContent .de74-fresh{font-size:8px;color:#718391;white-space:nowrap}
       #drawerContent .de74-outlook{font-size:11px;line-height:1.58;color:#c4d0d9}
+      #drawerContent .de74-status{padding:9px 10px;margin:2px 0 9px;border:1px solid #263744;border-radius:10px;background:#0c141b;font-size:10px;line-height:1.45;color:#b8c6d0}
+      #drawerContent .de74-status b{color:#eef4f7}
       #drawerContent .de74-news{padding:10px 0;border-top:1px solid #21303b}
       #drawerContent .de74-news:first-of-type{border-top:0;padding-top:2px}
       #drawerContent .de74-news-title{font-size:11px;font-weight:950;line-height:1.35;color:#edf3f7}
-      #drawerContent .de74-news-meta{font-size:8px;color:#748795;margin-top:3px}
+      #drawerContent .de74-news-meta{font-size:8px;color:#748795;margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+      #drawerContent .de74-badge{display:inline-block;border:1px solid #3e5566;border-radius:999px;padding:1px 5px;color:#a9c6da;font-weight:900;text-transform:uppercase;letter-spacing:.04em}
       #drawerContent .de74-news-summary{font-size:10px;line-height:1.45;color:#a9bac6;margin-top:6px}
       #drawerContent .de74-impact{font-size:10px;line-height:1.45;color:#c7d3dc;margin-top:6px;padding-left:8px;border-left:2px solid #435b6d}
       #drawerContent .de74-link{display:inline-block;margin-top:6px;font-size:9px;color:#81b9df;text-decoration:none;font-weight:900}
@@ -36,7 +40,7 @@
   async function rest(table,query){
     const cfg=apiConfig();if(!cfg.url||!cfg.key)return [];
     const r=await fetch(cfg.url+'/rest/v1/'+table+'?'+query,{headers:{apikey:cfg.key,Accept:'application/json'},cache:'no-store'});
-    if(!r.ok)throw new Error('player news unavailable');
+    if(!r.ok)throw new Error('player data unavailable');
     const data=await r.json();return Array.isArray(data)?data:[];
   }
 
@@ -75,7 +79,6 @@
   function outlookText(p,news){
     const name=String(p?.name||'This player');
     if(!news.length)return 'There is no recent player-specific news in the current feed, so there is no news-driven change to '+name+'\'s upcoming-season outlook right now.';
-
     const material=news.filter(isMaterial);
     const lead=material[0]||news[0];
     const second=news.find(n=>n!==lead&&String(n?.headline||'')!==String(lead?.headline||''));
@@ -91,37 +94,64 @@
     drawer.querySelector('#deFantasy74')?.remove();
     const wrap=document.createElement('div');wrap.id='deFantasy74';wrap.className='de74-wrap';wrap.dataset.playerKey=keyFor(p.name);
     wrap.innerHTML=`
+      <div class="de74-section" id="de74News">
+        <div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">ESPN · CBS · Sleeper</span></div>
+        <div class="de74-loading"></div><div class="de74-loading" style="width:64%"></div>
+      </div>
       <div class="de74-section" id="de74Outlook">
         <div class="de74-head"><h3>Upcoming Season Fantasy Outlook</h3><span class="de74-fresh">news-based</span></div>
         <div class="de74-loading"></div><div class="de74-loading" style="width:58%"></div>
-      </div>
-      <div class="de74-section" id="de74News">
-        <div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">updated hourly</span></div>
-        <div class="de74-loading"></div><div class="de74-loading" style="width:64%"></div>
       </div>`;
-    const stats=drawer.querySelector('.stats');
-    if(stats?.nextSibling)stats.parentNode.insertBefore(wrap,stats.nextSibling);else drawer.appendChild(wrap);
+    const head=drawer.querySelector('.detailhead');
+    if(head?.nextSibling)head.parentNode.insertBefore(wrap,head.nextSibling);else if(head)head.parentNode.appendChild(wrap);else drawer.prepend(wrap);
     return wrap;
+  }
+
+  function playerId(p){
+    const direct=p?.sleeperId||p?.id;if(direct)return String(direct);
+    try{const m=typeof marketFor==='function'?marketFor(p):null;return m?.id?String(m.id):''}catch(_){return ''}
+  }
+
+  async function getSleeperStatus(p){
+    const id=playerId(p);
+    const q=id?'player_id=eq.'+encodeURIComponent(id):'full_name=eq.'+encodeURIComponent(String(p?.name||''));
+    if(!q)return null;
+    try{return (await rest('sleeper_player_status',q+'&select=player_id,full_name,team,status,injury_status,injury_body_part,news_updated,updated_at&limit=1'))[0]||null}catch(_){return null}
+  }
+
+  function sleeperStatusHtml(s){
+    if(!s)return '';
+    const parts=[];
+    if(s.injury_status)parts.push(String(s.injury_status));
+    else if(s.status)parts.push(String(s.status));
+    if(s.injury_body_part)parts.push(String(s.injury_body_part));
+    const newsAt=Number(s.news_updated)>0?new Date(Number(s.news_updated)):null;
+    const when=newsAt&&Number.isFinite(newsAt.getTime())?relativeTime(newsAt.toISOString()):relativeTime(s.updated_at);
+    return '<div class="de74-status"><b>Sleeper status:</b> '+esc(parts.join(' · ')||'No active designation')+(when?' <span style="color:#718391">· player data updated '+esc(when)+'</span>':'')+'</div>';
   }
 
   async function hydrate(p){
     const wrap=mountShell(p);if(!wrap)return;
     const key=keyFor(p.name);if(!key)return;
-    const newsQ='player_key=eq.'+encodeURIComponent(key)+'&select=provider,headline,summary,fantasy_impact,source_url,published_at&order=published_at.desc&limit=3';
-    let news=[];
-    try{news=await rest('player_news',newsQ)}catch(e){console.warn('Draft Edge player news unavailable',e)}
+    const newsQ='player_key=eq.'+encodeURIComponent(key)+'&select=provider,headline,summary,fantasy_impact,categories,source_url,published_at&order=published_at.desc&limit=6';
+    let news=[],status=null;
+    try{[news,status]=await Promise.all([rest('player_news',newsQ),getSleeperStatus(p)])}catch(e){console.warn('Workhorse player news unavailable',e)}
     const current=$('deFantasy74');if(!current||current.dataset.playerKey!==key)return;
+
+    const box=$('de74News');if(box){
+      let body=sleeperStatusHtml(status);
+      if(news.length){
+        body+=news.map(n=>{
+          const cats=Array.isArray(n.categories)?n.categories:[];
+          const indirect=cats.includes('indirect');
+          return '<div class="de74-news"><div class="de74-news-title">'+esc(n.headline)+'</div><div class="de74-news-meta"><span>'+esc(n.provider||'Source')+(n.published_at?' · '+esc(relativeTime(n.published_at)):'')+'</span>'+(indirect?'<span class="de74-badge">Indirect impact</span>':'')+'</div>'+(n.summary?'<div class="de74-news-summary">'+esc(n.summary)+'</div>':'')+(n.fantasy_impact?'<div class="de74-impact"><b>Fantasy impact:</b> '+esc(n.fantasy_impact)+'</div>':'')+(n.source_url?'<a class="de74-link" href="'+esc(n.source_url)+'" target="_blank" rel="noopener noreferrer">View source ↗</a>':'')+'</div>';
+        }).join('');
+      }else body+='<div class="de74-empty">No recent player-specific article is in the current feed.</div>';
+      box.innerHTML='<div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">refreshes every 15m</span></div>'+body;
+    }
 
     const out=$('de74Outlook');if(out){
       out.innerHTML='<div class="de74-head"><h3>Upcoming Season Fantasy Outlook</h3><span class="de74-fresh">news-based</span></div><div class="de74-outlook">'+esc(outlookText(p,news))+'</div>';
-    }
-
-    const box=$('de74News');if(box){
-      let body='';
-      if(news.length){
-        body=news.map(n=>'<div class="de74-news"><div class="de74-news-title">'+esc(n.headline)+'</div><div class="de74-news-meta">'+esc(n.provider||'Source')+(n.published_at?' · '+esc(relativeTime(n.published_at)):'')+'</div>'+(n.summary?'<div class="de74-news-summary">'+esc(n.summary)+'</div>':'')+(n.fantasy_impact?'<div class="de74-impact"><b>Fantasy impact:</b> '+esc(n.fantasy_impact)+'</div>':'')+(n.source_url?'<a class="de74-link" href="'+esc(n.source_url)+'" target="_blank" rel="noopener noreferrer">View source ↗</a>':'')+'</div>').join('');
-      }else body='<div class="de74-empty">No recent player-specific news in the current feed.</div>';
-      box.innerHTML='<div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">updated hourly</span></div>'+body;
     }
   }
 
@@ -129,7 +159,7 @@
     const base=window[name];if(typeof base!=='function'||base.__de74Wrapped)return;
     const wrapped=async function(...args){
       const p=resolver(args),out=await base.apply(this,args);
-      try{await hydrate(p)}catch(e){console.warn('Draft Edge player outlook unavailable',e)}
+      try{await hydrate(p)}catch(e){console.warn('Workhorse player outlook unavailable',e)}
       return out;
     };
     wrapped.__de74Wrapped=true;wrapped.__de74Base=base;
