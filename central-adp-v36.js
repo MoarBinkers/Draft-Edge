@@ -1,4 +1,4 @@
-// v36 — multi-format Sleeper-only redraft ADP with shared per-format history.
+// v36.1 — multi-format Sleeper-only redraft ADP with shared per-format history.
 (()=>{
   const HISTORY_KEY='de29_adp_history';
   const FORMAT_KEY='de36_adp_format';
@@ -20,7 +20,7 @@
     if(window.supabase&&typeof window.supabase.createClient==='function'&&typeof DRAFT_EDGE_SUPABASE_URL!=='undefined'&&typeof DRAFT_EDGE_SUPABASE_KEY!=='undefined'){
       centralClient=window.supabase.createClient(DRAFT_EDGE_SUPABASE_URL,DRAFT_EDGE_SUPABASE_KEY);return centralClient;
     }
-    throw new Error('Draft Edge database is not ready yet.');
+    throw new Error('Workhorse database is not ready yet.');
   }
   const clean=v=>typeof cleanPlayerName==='function'?cleanPlayerName(v):String(v||'').trim();
   const nrm=v=>typeof norm==='function'?norm(v):clean(v).toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -55,7 +55,7 @@
     root.innerHTML=Object.entries(FORMATS).map(([key,cfg])=>'<button class="pill '+(key===activeFormat?'active':'')+'" data-adp-format="'+key+'" style="padding:9px 14px">'+cfg.label+'</button>').join('');
     root.querySelectorAll('[data-adp-format]').forEach(btn=>btn.onclick=()=>setFormat(btn.dataset.adpFormat));
     const p=document.querySelector('#page-adp .pagehead p');
-    if(p)p.textContent='Sleeper '+FORMATS[activeFormat].label+' redraft ADP. The decimal ADP stays hidden; Draft Edge shows its overall rank position.';
+    if(p)p.textContent='Sleeper '+FORMATS[activeFormat].label+' redraft ADP.';
   }
 
   async function loadCentralRanks(){
