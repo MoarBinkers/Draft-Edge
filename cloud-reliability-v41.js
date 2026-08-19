@@ -1,4 +1,4 @@
-// v41 — reliable cloud saves, optimistic revision checks, and ranking backups.
+// v41.1 — reliable cloud saves, optimistic revision checks, ranking backups, and sync preferences.
 (()=>{
   const DEVICE_KEY='de41_device_id';
   const CACHE_KEY='de41_cloud_cache';
@@ -19,7 +19,7 @@
   function cacheLists(){
     try{localStorage.setItem(CACHE_KEY,JSON.stringify({activeListId,rankingLists,savedAt:Date.now()}))}catch(_){}
   }
-  function cloneData(list){return {players:structuredClone(list?.players||[]),tiers:structuredClone(list?.tiers||emptyTiers()),draftPrefs:structuredClone(list?.draftPrefs||null)}}
+  function cloneData(list){return {players:structuredClone(list?.players||[]),tiers:structuredClone(list?.tiers||emptyTiers()),draftPrefs:structuredClone(list?.draftPrefs||null),excludedSleeperIds:structuredClone(list?.excludedSleeperIds||[])}}
 
   const baseSave=typeof save==='function'?save:null;
   if(baseSave){
@@ -52,7 +52,7 @@
 
   async function resolveConflict(id,payload,list){
     const server=await fetchCloudRow(id);
-    try{await storeRecoveryVersion({...list,name:payload.name,players:payload.data.players,tiers:payload.data.tiers},'conflict_local')}catch(e){console.warn('Conflict recovery snapshot failed',e)}
+    try{await storeRecoveryVersion({...list,name:payload.name,players:payload.data.players,tiers:payload.data.tiers,excludedSleeperIds:payload.data.excludedSleeperIds||[]},'conflict_local')}catch(e){console.warn('Conflict recovery snapshot failed',e)}
     const written=await writePayload(id,payload,Number(server.revision)||1);
     if(!written)throw new Error('Cloud version changed again while resolving a sync conflict.');
     list._cloudRevision=Number(written.revision)||((Number(server.revision)||1)+1);
@@ -105,9 +105,10 @@
   window.DraftEdgeFlushCloudSave=flushCloudSave;
 
   persistNewList=async function(list){
+    if(!Array.isArray(list.excludedSleeperIds))list.excludedSleeperIds=[];
     if(currentUser&&supabaseClient){
       const {data,error}=await supabaseClient.from('ranking_lists').insert({
-        user_id:currentUser.id,name:list.name,data:{players:list.players,tiers:list.tiers,draftPrefs:list.draftPrefs||null},last_device_id:deviceId
+        user_id:currentUser.id,name:list.name,data:{players:list.players,tiers:list.tiers,draftPrefs:list.draftPrefs||null,excludedSleeperIds:list.excludedSleeperIds||[]},last_device_id:deviceId
       }).select('id,name,data,created_at,updated_at,revision,last_device_id').single();
       if(error)throw error;
       list.id=data.id;list.createdAt=Date.parse(data.created_at)||Date.now();list.updatedAt=Date.parse(data.updated_at)||Date.now();
@@ -131,9 +132,9 @@
       if(error)throw error;
       rankingLists={};
       (data||[]).forEach(row=>rankingLists[row.id]={
-        id:row.id,name:row.name,players:row.data?.players||[],tiers:row.data?.tiers||emptyTiers(),draftPrefs:row.data?.draftPrefs||null,
+        id:row.id,name:row.name,players:row.data?.players||[],tiers:row.data?.tiers||emptyTiers(),draftPrefs:row.data?.draftPrefs||null,excludedSleeperIds:Array.isArray(row.data?.excludedSleeperIds)?row.data.excludedSleeperIds:[],
         createdAt:Date.parse(row.created_at)||Date.now(),updatedAt:Date.parse(row.updated_at)||Date.now(),
-        _cloudRevision:Number(row.revision)||1,_cloudUpdatedAt:Date.parse(row.updated_at)||Date.now(),_lastDeviceId:row.last_device_id||null
+        _cloudRevision:Number(row.revision)||1,_cloudUpdatedAt=Date.parse(row.updated_at)||Date.now(),_lastDeviceId:row.last_device_id||null
       });
       activeListId=(prior&&rankingLists[prior])?prior:(data?.[0]?.id||null);
       loadActiveList();cacheLists();renderEverything();syncStatus('Cloud synced.','good');
@@ -165,7 +166,7 @@
         const {data,error}=await supabaseClient.from('ranking_list_versions').select('id,name,data,revision,created_at').eq('id',id).eq('user_id',currentUser.id).single();
         if(error)throw error;
         const list=currentList();if(!list)throw new Error('No active ranking list.');
-        list.name=data.name;list.players=structuredClone(data.data?.players||[]);list.tiers=structuredClone(data.data?.tiers||emptyTiers());list.updatedAt=Date.now();
+        list.name=data.name;list.players=structuredClone(data.data?.players||[]);list.tiers=structuredClone(data.data?.tiers||emptyTiers());list.excludedSleeperIds=structuredClone(data.data?.excludedSleeperIds||[]);list.updatedAt=Date.now();
         rankingLists[activeListId]=list;loadActiveList();cacheLists();renderEverything();await flushCloudSave();await renderBackups();
       }catch(err){alert('Restore failed: '+err.message)}
     });
