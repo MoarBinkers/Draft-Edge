@@ -1,8 +1,12 @@
-// v74.5 — top-of-drawer player news; only real team/usage news can drive fantasy outlook.
+// v74.6 — player drawer separates real football news from market signals.
 (()=>{
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
   const keyFor=v=>String(v??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'').trim();
+  const cats=n=>Array.isArray(n?.categories)?n.categories:[];
+  const isTrending=n=>cats(n).includes('trending');
+  const isIndirect=n=>cats(n).includes('indirect');
+  const stamp=n=>{const t=new Date(n?.published_at||0).getTime();return Number.isFinite(t)?t:0};
 
   function installCss(){
     if($('de74Css'))return;
@@ -25,6 +29,7 @@
       #drawerContent .de74-impact{font-size:10px;line-height:1.45;color:#c7d3dc;margin-top:6px;padding-left:8px;border-left:2px solid #435b6d}
       #drawerContent .de74-link{display:inline-block;margin-top:6px;font-size:9px;color:#81b9df;text-decoration:none;font-weight:900}
       #drawerContent .de74-empty{font-size:10px;color:#7f909e;line-height:1.45}
+      #drawerContent .de74-market-note{font-size:9px;color:#8395a3;line-height:1.45;margin:-2px 0 5px}
       #drawerContent .de74-loading{height:8px;width:74%;border-radius:999px;background:#1b2832;margin:7px 0}
     `;document.head.appendChild(s);
   }
@@ -72,15 +77,22 @@
   }
 
   function isMaterial(n){
-    const cats=Array.isArray(n?.categories)?n.categories:[];
-    if(cats.includes('trending'))return false;
+    if(isTrending(n))return false;
     const t=String(n?.fantasy_impact||'').toLowerCase();
     return !!t&&!/does not clearly change|relevant context to monitor|market signal, not proof/.test(t);
   }
 
+  function orderedFootballNews(news){
+    return news.filter(n=>!isTrending(n)).sort((a,b)=>{
+      const pa=isIndirect(a)?1:0,pb=isIndirect(b)?1:0;
+      if(pa!==pb)return pa-pb;
+      return stamp(b)-stamp(a);
+    });
+  }
+
   function outlookText(p,news){
     const name=String(p?.name||'This player');
-    const material=news.filter(isMaterial);
+    const material=news.filter(isMaterial).sort((a,b)=>stamp(b)-stamp(a));
     if(!material.length)return 'There is no recent team, health, role or usage news that materially changes '+name+'\'s upcoming-season outlook right now.';
     const lead=material[0];
     const second=material.find(n=>n!==lead&&String(n?.headline||'')!==String(lead?.headline||''));
@@ -97,8 +109,12 @@
     const wrap=document.createElement('div');wrap.id='deFantasy74';wrap.className='de74-wrap';wrap.dataset.playerKey=keyFor(p.name);
     wrap.innerHTML=`
       <div class="de74-section" id="de74News">
-        <div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">RotoWire · ESPN · CBS · Sleeper</span></div>
+        <div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">RotoWire · ESPN · CBS · Sleeper status</span></div>
         <div class="de74-loading"></div><div class="de74-loading" style="width:64%"></div>
+      </div>
+      <div class="de74-section" id="de74Market" hidden>
+        <div class="de74-head"><h3>Market Signals</h3><span class="de74-fresh">Sleeper activity</span></div>
+        <div class="de74-market-note">Adds and drops show fantasy-manager behavior, not a football role change.</div>
       </div>
       <div class="de74-section" id="de74Outlook">
         <div class="de74-head"><h3>Upcoming Season Fantasy Outlook</h3><span class="de74-fresh">team & usage news only</span></div>
@@ -132,29 +148,40 @@
     return '<div class="de74-status"><b>Sleeper status:</b> '+esc(parts.join(' · ')||'No active designation')+(when?' <span style="color:#718391">· player data updated '+esc(when)+'</span>':'')+'</div>';
   }
 
+  function newsCard(n,market=false){
+    const indirect=isIndirect(n);
+    const impact=n.fantasy_impact?'<div class="de74-impact"><b>'+(market?'Market read:':'Fantasy impact:')+'</b> '+esc(n.fantasy_impact)+'</div>':'';
+    return '<div class="de74-news"><div class="de74-news-title">'+esc(n.headline)+'</div><div class="de74-news-meta"><span>'+esc(n.provider||'Source')+(n.published_at?' · '+esc(relativeTime(n.published_at)):'')+'</span>'+(indirect?'<span class="de74-badge">Indirect impact</span>':'')+(market?'<span class="de74-badge">Market signal</span>':'')+'</div>'+(n.summary?'<div class="de74-news-summary">'+esc(n.summary)+'</div>':'')+impact+(n.source_url?'<a class="de74-link" href="'+esc(n.source_url)+'" target="_blank" rel="noopener noreferrer">View source ↗</a>':'')+'</div>';
+  }
+
   async function hydrate(p){
     const wrap=mountShell(p);if(!wrap)return;
     const key=keyFor(p.name);if(!key)return;
-    const newsQ='player_key=eq.'+encodeURIComponent(key)+'&select=provider,headline,summary,fantasy_impact,categories,source_url,published_at&order=published_at.desc&limit=6';
-    let news=[],status=null;
-    try{[news,status]=await Promise.all([rest('player_news',newsQ),getSleeperStatus(p)])}catch(e){console.warn('Workhorse player news unavailable',e)}
+    const newsQ='player_key=eq.'+encodeURIComponent(key)+'&select=provider,headline,summary,fantasy_impact,categories,source_url,published_at&order=published_at.desc&limit=18';
+    let allNews=[],status=null;
+    try{[allNews,status]=await Promise.all([rest('player_news',newsQ),getSleeperStatus(p)])}catch(e){console.warn('Workhorse player news unavailable',e)}
     const current=$('deFantasy74');if(!current||current.dataset.playerKey!==key)return;
+
+    const footballNews=orderedFootballNews(allNews);
+    const visibleNews=footballNews.slice(0,6);
+    const marketNews=allNews.filter(isTrending).sort((a,b)=>stamp(b)-stamp(a)).slice(0,4);
 
     const box=$('de74News');if(box){
       let body=sleeperStatusHtml(status);
-      if(news.length){
-        body+=news.map(n=>{
-          const cats=Array.isArray(n.categories)?n.categories:[];
-          const indirect=cats.includes('indirect');
-          const trending=cats.includes('trending');
-          return '<div class="de74-news"><div class="de74-news-title">'+esc(n.headline)+'</div><div class="de74-news-meta"><span>'+esc(n.provider||'Source')+(n.published_at?' · '+esc(relativeTime(n.published_at)):'')+'</span>'+(indirect?'<span class="de74-badge">Indirect impact</span>':'')+(trending?'<span class="de74-badge">Market signal</span>':'')+'</div>'+(n.summary?'<div class="de74-news-summary">'+esc(n.summary)+'</div>':'')+(n.fantasy_impact?'<div class="de74-impact"><b>Fantasy impact:</b> '+esc(n.fantasy_impact)+'</div>':'')+(n.source_url?'<a class="de74-link" href="'+esc(n.source_url)+'" target="_blank" rel="noopener noreferrer">View source ↗</a>':'')+'</div>';
-        }).join('');
-      }else body+='<div class="de74-empty">No recent player-specific article is in the current feed.</div>';
-      box.innerHTML='<div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">refreshes every 15m</span></div>'+body;
+      if(visibleNews.length)body+=visibleNews.map(n=>newsCard(n,false)).join('');
+      else body+='<div class="de74-empty">No recent team, health, role or usage update is in the current feed.</div>';
+      box.innerHTML='<div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">football updates first</span></div>'+body;
+    }
+
+    const market=$('de74Market');if(market){
+      if(marketNews.length){
+        market.hidden=false;
+        market.innerHTML='<div class="de74-head"><h3>Market Signals</h3><span class="de74-fresh">Sleeper activity</span></div><div class="de74-market-note">Adds and drops show fantasy-manager behavior, not a football role change.</div>'+marketNews.map(n=>newsCard(n,true)).join('');
+      }else market.hidden=true;
     }
 
     const out=$('de74Outlook');if(out){
-      out.innerHTML='<div class="de74-head"><h3>Upcoming Season Fantasy Outlook</h3><span class="de74-fresh">team & usage news only</span></div><div class="de74-outlook">'+esc(outlookText(p,news))+'</div>';
+      out.innerHTML='<div class="de74-head"><h3>Upcoming Season Fantasy Outlook</h3><span class="de74-fresh">team & usage news only</span></div><div class="de74-outlook">'+esc(outlookText(p,footballNews))+'</div>';
     }
   }
 
