@@ -72,6 +72,54 @@ jobs:
             node --check "$file"
           done < /tmp/workhorse-loaded-js.txt
 
+      - name: Boot Workhorse in headless Chrome
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/workhorse-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            sleep 0.25
+          done
+
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME" ]; then
+            echo "No headless Chrome binary is available on this runner."
+            exit 1
+          fi
+
+          timeout 35s "$CHROME" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --virtual-time-budget=12000 \
+            --dump-dom http://127.0.0.1:4173/ \
+            >/tmp/workhorse-dom.html 2>/tmp/workhorse-chrome.log || {
+              cat /tmp/workhorse-chrome.log || true
+              exit 1
+            }
+
+          if grep -q 'The app could not start' /tmp/workhorse-dom.html; then
+            echo 'Workhorse reached its startup error screen.'
+            cat /tmp/workhorse-dom.html
+            exit 1
+          fi
+          if grep -q 'id="workhorse-app-gate"' /tmp/workhorse-dom.html; then
+            echo 'Workhorse never cleared its loading gate.'
+            cat /tmp/workhorse-dom.html
+            exit 1
+          fi
+          if ! grep -qi 'WORKHORSE' /tmp/workhorse-dom.html; then
+            echo 'Workhorse branding/app content was not rendered.'
+            cat /tmp/workhorse-dom.html
+            exit 1
+          fi
+
+          echo 'Workhorse boot smoke test passed.'
+
       - name: Note unused legacy scripts
         continue-on-error: true
         run: |
