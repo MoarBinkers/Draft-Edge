@@ -1,4 +1,4 @@
-// v75.1 — deliberate long-press mobile ranking reorder with clean tap/profile separation.
+// v75.2 — deliberate long-press mobile ranking reorder using the same row identity as desktop.
 (()=>{
   const MOBILE_QUERY='(max-width: 820px)';
   const HOLD_MS=280;
@@ -7,16 +7,16 @@
   if(!isMobileTouch()) return;
 
   const style=document.createElement('style');
-  style.id='workhorse-mobile-touch-v751';
+  style.id='workhorse-mobile-touch-v752';
   style.textContent=`
     @media (max-width:820px){
       html,body{overflow-x:hidden}
-      #rankList,.player.rankings{max-width:100%;box-sizing:border-box}
-      #rankList .player.rankings[data-index]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-      #rankList .player.rankings.mobile-touch-dragging{opacity:.34}
+      #rankList,#rankList .player{max-width:100%;box-sizing:border-box}
+      #rankList .player[data-index]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+      #rankList .player.mobile-touch-dragging{opacity:.34}
       .mobile-touch-ghost{position:fixed!important;z-index:2147483000!important;pointer-events:none!important;margin:0!important;opacity:.96!important;box-shadow:0 18px 42px rgba(0,0,0,.42)!important;transform:scale(.985)}
-      #rankList .player.rankings.mobile-drop-before{box-shadow:inset 0 3px 0 #60a5fa!important}
-      #rankList .player.rankings.mobile-drop-after{box-shadow:inset 0 -3px 0 #60a5fa!important}
+      #rankList .player.mobile-drop-before{box-shadow:inset 0 3px 0 #60a5fa!important}
+      #rankList .player.mobile-drop-after{box-shadow:inset 0 -3px 0 #60a5fa!important}
       #rankList .tier-drop.mobile-tier-drop{outline:2px solid rgba(96,165,250,.72);outline-offset:-2px}
     }
   `;
@@ -92,7 +92,7 @@
   function markTarget(touch){
     clearMarks();
     const hit=document.elementFromPoint(touch.clientX,touch.clientY);
-    const row=hit?.closest?.('#rankList .player.rankings[data-index]');
+    const row=hit?.closest?.('#rankList .player[data-index]');
     const tier=hit?.closest?.('#rankList .tier-drop[data-tier]');
     state.targetRow=row&&row!==state.row?row:null;
     state.targetTier=tier||row?.closest?.('.tier-drop[data-tier]')||null;
@@ -174,7 +174,7 @@
 
   document.addEventListener('touchstart',e=>{
     if(!isMobileTouch()||e.touches.length!==1||state)return;
-    const row=e.target.closest?.('#rankList .player.rankings[data-index]');
+    const row=e.target.closest?.('#rankList .player[data-index]');
     if(!row)return;
     if(e.target.closest?.('button,input,textarea,select,a,[contenteditable="true"]'))return;
     const player=playerFromRow(row);if(!player)return;
@@ -211,13 +211,13 @@
   document.addEventListener('visibilitychange',()=>{if(document.hidden)finish(false)});
 
   document.addEventListener('dragstart',e=>{
-    if(isMobileTouch()&&e.target.closest?.('#rankList .player.rankings[data-index]'))e.preventDefault();
+    if(isMobileTouch()&&e.target.closest?.('#rankList .player[data-index]'))e.preventDefault();
   },true);
   document.addEventListener('contextmenu',e=>{
-    if((state?.active||Date.now()<suppressClickUntil)&&e.target.closest?.('#rankList .player.rankings[data-index]'))e.preventDefault();
+    if((state?.active||Date.now()<suppressClickUntil)&&e.target.closest?.('#rankList .player[data-index]'))e.preventDefault();
   },true);
   document.addEventListener('click',e=>{
-    if(Date.now()<suppressClickUntil&&e.target.closest?.('#rankList .player.rankings[data-index]')){
+    if(Date.now()<suppressClickUntil&&e.target.closest?.('#rankList .player[data-index]')){
       e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
     }
   },true);
