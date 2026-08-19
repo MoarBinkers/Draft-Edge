@@ -1,4 +1,4 @@
-// Workhorse brand patch — keeps branding isolated from the core fantasy app.
+// Workhorse brand bootstrap — owns first visible paint and stays isolated from fantasy interactions.
 (()=>{
   const TITLE='Workhorse — Fantasy Analytics';
   const ICON_PARTS=Array.from({length:8},(_,i)=>'./assets/workhorse-icon-'+i+'.txt?v=1');
@@ -66,9 +66,10 @@
     });
   }
 
-  function revealHeader(){
-    const pre=document.getElementById('workhorse-prebrand');
-    if(pre)pre.remove();
+  function revealApp(){
+    document.documentElement.classList.add('workhorse-ready');
+    document.getElementById('workhorse-prebrand')?.remove();
+    document.getElementById('workhorse-app-gate')?.remove();
   }
 
   function applyHeader(){
@@ -78,7 +79,7 @@
     const existing=inner.querySelector('.workhorse-main-lockup img');
     if(existing){
       if(existing.src!==mainLogoData)existing.src=mainLogoData;
-      revealHeader();
+      revealApp();
       return true;
     }
     inner.innerHTML='';
@@ -88,9 +89,10 @@
     img.src=mainLogoData;
     img.alt='Workhorse Fantasy Analytics';
     img.decoding='async';
+    img.draggable=false;
     wrap.appendChild(img);
     inner.appendChild(wrap);
-    revealHeader();
+    revealApp();
     return true;
   }
 
@@ -115,8 +117,7 @@
     return 'data:image/webp;base64,'+chunks.join('').replace(/\s+/g,'');
   }
 
-  // Apply branding at startup only. Do not observe the full app DOM: player drag/drop
-  // intentionally moves list nodes around and must not trigger branding work mid-drag.
+  // Startup-only branding. Never observe the full app DOM: rankings intentionally move nodes.
   apply();
   Promise.all([loadData(ICON_PARTS),loadData(MAIN_PARTS)]).then(([icon,main])=>{
     iconData=icon;
@@ -124,5 +125,12 @@
     apply();
     setTimeout(apply,250);
     setTimeout(apply,1000);
-  }).catch(e=>console.warn('Workhorse brand assets unavailable',e));
+  }).catch(e=>{
+    console.warn('Workhorse brand assets unavailable',e);
+    const inner=document.querySelector('.brand-lockup-inner');
+    if(inner){
+      inner.innerHTML='<div style="font-weight:1000;font-size:34px;letter-spacing:-.04em;text-align:center">WORKHORSE<div style="font-size:10px;letter-spacing:.28em;color:#8194a4;margin-top:4px">FANTASY ANALYTICS</div></div>';
+    }
+    revealApp();
+  });
 })();
