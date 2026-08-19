@@ -1,8 +1,10 @@
-// v39.1 — tiers are visual only; ranking order is canonical and synced across ALL/position views.
+// v39.2 — deterministic desktop pointer reordering; tiers stay visual-only in position views.
 (()=>{
-  let dragSnap=null;
   let fixing=false;
-  let dragGhost=null;
+  let state=null;
+  let suppressClickUntil=0;
+  const DESKTOP_QUERY='(min-width: 821px)';
+  const isDesktop=()=>window.matchMedia?.(DESKTOP_QUERY).matches;
 
   const pKey=p=>{
     if(!p)return '';
@@ -12,30 +14,9 @@
     return String(p.position||'')+':'+n;
   };
   const tierVal=v=>v==null||v===''||Number(v)===0?null:Number(v);
-  const num=(v,fallback)=>Number.isFinite(Number(v))?Number(v):fallback;
-
-  function ensureDragUx(){
-    if(!document.getElementById('workhorse-rank-drag-ux')){
-      const s=document.createElement('style');
-      s.id='workhorse-rank-drag-ux';
-      s.textContent=`
-        #rankList .player[data-index]{-webkit-user-select:none;user-select:none}
-        #rankList .player[data-index] img{-webkit-user-drag:none!important;user-drag:none!important}
-      `;
-      document.head.appendChild(s);
-    }
-    if(!dragGhost&&document.body){
-      dragGhost=document.createElement('div');
-      dragGhost.setAttribute('aria-hidden','true');
-      dragGhost.style.cssText='position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:.01;pointer-events:none;';
-      document.body.appendChild(dragGhost);
-    }
-  }
-  ensureDragUx();
-
-  function overallOrder(){
-    return players.slice().sort((a,b)=>num(a.overall,999999)-num(b.overall,999999));
-  }
+  const num=(v,f=999999)=>Number.isFinite(Number(v))?Number(v):f;
+  const sameTier=(a,b)=>tierVal(a)===tierVal(b);
+  const overallOrder=()=>Array.isArray(players)?players.slice().sort((a,b)=>num(a.overall)-num(b.overall)):[];
 
   function syncPosRanksFromOverall(){
     if(!Array.isArray(players))return false;
@@ -48,164 +29,253 @@
     return changed;
   }
 
-  orderedPos=function(pos){
-    return overallOrder().filter(p=>String(p.position||'')===String(pos));
-  };
-  resequencePos=function(_pos){
-    syncPosRanksFromOverall();
-  };
+  orderedPos=function(pos){return overallOrder().filter(p=>String(p.position||'')===String(pos))};
+  resequencePos=function(){syncPosRanksFromOverall()};
   window.orderedPos=orderedPos;
   window.resequencePos=resequencePos;
 
-  function captureDrag(row){
-    if(fixing||!Array.isArray(players))return;
+  function installCss(){
+    if(document.getElementById('workhorse-rank-pointer-v392'))return;
+    const s=document.createElement('style');
+    s.id='workhorse-rank-pointer-v392';
+    s.textContent=`
+      @media (min-width:821px){
+        #rankList .player[data-index]{-webkit-user-select:none;user-select:none;cursor:grab}
+        #rankList .player[data-index]:active{cursor:grabbing}
+        #rankList .player[data-index] img{-webkit-user-drag:none!important;user-drag:none!important;pointer-events:none}
+        #rankList .player.wh-pointer-dragging{opacity:.46!important}
+        #rankList .player.wh-drop-before{box-shadow:inset 0 3px 0 #60a5fa!important}
+        #rankList .player.wh-drop-after{box-shadow:inset 0 -3px 0 #60a5fa!important}
+        #rankList .tier-drop.wh-tier-target{outline:2px solid rgba(96,165,250,.68);outline-offset:-2px}
+        body.wh-ranking-dragging,body.wh-ranking-dragging *{cursor:grabbing!important}
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function disableNativeRows(root=document){
+    if(!isDesktop())return;
+    root.querySelectorAll?.('#rankList .player[data-index]').forEach(row=>{
+      row.draggable=false;
+      row.setAttribute('draggable','false');
+      row.querySelectorAll('img').forEach(img=>{img.draggable=false;img.setAttribute('draggable','false')});
+    });
+  }
+
+  function installRowGuard(){
+    installCss();
+    disableNativeRows();
+    const list=document.getElementById('rankList');
+    if(!list||list.__whPointerObserver)return;
+    const mo=new MutationObserver(muts=>{
+      if(!isDesktop())return;
+      for(const m of muts)for(const n of m.addedNodes)if(n.nodeType===1)disableNativeRows(n.matches?.('.player[data-index]')?n.parentElement||n:n);
+    });
+    mo.observe(list,{childList:true,subtree:true});
+    list.__whPointerObserver=mo;
+  }
+
+  const playerFromRow=row=>{
     const i=Number(row?.dataset?.index);
-    if(!Number.isInteger(i)||!players[i])return;
-    const dragged=players[i];
-    const records=new Map();
-    players.forEach(p=>records.set(pKey(p),{
-      overall:num(p.overall,999999),
-      posRank:num(p.posRank,999999),
-      tier:tierVal(p.tier),
-      position:String(p.position||'')
-    }));
-    const pos=String(dragged.position||'');
-    dragSnap={
-      key:pKey(dragged),
-      position:pos,
-      oldTier:tierVal(dragged.tier),
-      records,
-      posOrder:overallOrder().filter(p=>String(p.position||'')===pos).map(pKey),
-      posSlots:overallOrder().filter(p=>String(p.position||'')===pos).map(p=>num(p.overall,999999)).sort((a,b)=>a-b)
-    };
+    return Number.isInteger(i)&&Array.isArray(players)?players[i]||null:null;
+  };
+
+  function clearMarks(){
+    document.querySelectorAll('#rankList .wh-drop-before,#rankList .wh-drop-after').forEach(el=>el.classList.remove('wh-drop-before','wh-drop-after'));
+    document.querySelectorAll('#rankList .wh-tier-target').forEach(el=>el.classList.remove('wh-tier-target'));
   }
 
-  // Stop player headshots from becoming a separate browser drag source.
-  document.addEventListener('pointerdown',e=>{
-    const row=e.target.closest?.('#rankList .player[data-index]');
-    if(!row)return;
-    row.querySelectorAll('img').forEach(img=>{img.draggable=false});
-  },true);
+  function tierFromSection(section){return section?tierVal(section.dataset.tier):null}
 
-  document.addEventListener('dragstart',e=>{
-    const row=e.target.closest?.('#rankList .player[data-index]');
-    if(!row)return;
-    ensureDragUx();
-    row.querySelectorAll('img').forEach(img=>{img.draggable=false});
-    captureDrag(row);
-    if(e.dataTransfer){
-      try{e.dataTransfer.effectAllowed='move'}catch(_){}
-      try{e.dataTransfer.setData('text/plain',String(row.dataset.index||''))}catch(_){}
-      try{if(dragGhost)e.dataTransfer.setDragImage(dragGhost,0,0)}catch(_){}
+  function nearestTierAt(y){
+    const tiers=[...document.querySelectorAll('#rankList > .tier-drop[data-tier]')];
+    if(!tiers.length)return null;
+    let best=null,dist=Infinity;
+    for(const t of tiers){
+      const r=t.getBoundingClientRect();
+      const d=y<r.top?r.top-y:y>r.bottom?y-r.bottom:0;
+      if(d<dist){dist=d;best=t}
     }
-  },true);
-
-  // If a browser cancels a drag, never leave an old dragState or ghost styling behind.
-  document.addEventListener('dragend',e=>{
-    const row=e.target.closest?.('#rankList .player[data-index]');
-    if(!row)return;
-    setTimeout(()=>{
-      document.querySelectorAll('#rankList .player.dragging').forEach(el=>el.classList.remove('dragging'));
-      try{
-        if(typeof dragState!=='undefined'&&dragState?.el){
-          dragState={el:null,index:null,startPos:null,startTier:null};
-          dragSnap=null;
-          try{renderRankings()}catch(_){}
-        }
-      }catch(_){}
-    },0);
-  },true);
-
-  function tierFromDom(el){
-    const section=el?.closest?.('.tier-drop[data-tier]');
-    return section?tierVal(section.dataset.tier):null;
+    return best;
   }
 
-  function restoreCanonicalRanks(s){
-    let changed=false;
-    players.forEach(p=>{
-      const old=s.records.get(pKey(p));if(!old)return;
-      if(num(p.overall,-1)!==old.overall){p.overall=old.overall;changed=true}
-    });
-    if(syncPosRanksFromOverall())changed=true;
-    return changed;
+  function targetInRows(rows,y){
+    if(!rows.length)return {row:null,after:false};
+    for(const row of rows){
+      const r=row.getBoundingClientRect();
+      if(y<r.top+r.height/2)return {row,after:false};
+    }
+    return {row:rows[rows.length-1],after:true};
   }
 
-  function domKeysInTier(pos,tier){
-    const list=document.getElementById('rankList');if(!list)return [];
-    const section=[...list.querySelectorAll(':scope > .tier-drop[data-tier]')].find(el=>tierVal(el.dataset.tier)===tierVal(tier));
-    if(!section)return [];
-    return [...section.querySelectorAll(':scope > .player[data-index]')].map(row=>{
-      const i=Number(row.dataset.index);return Number.isInteger(i)&&players[i]?players[i]:null;
-    }).filter(p=>p&&String(p.position||'')===String(pos)).map(pKey);
+  function resolveTarget(x,y){
+    const list=document.getElementById('rankList');
+    if(!list)return {row:null,tier:null,after:false};
+    const mode=typeof rankPos==='string'?rankPos:'ALL';
+    if(mode==='ALL'){
+      const rows=[...list.querySelectorAll('.player[data-index]')].filter(r=>r!==state?.row&&r.offsetParent!==null);
+      const t=targetInRows(rows,y);
+      return {row:t.row,tier:null,after:t.after};
+    }
+
+    let hit=document.elementFromPoint(x,y);
+    let tier=hit?.closest?.('#rankList > .tier-drop[data-tier]')||nearestTierAt(y);
+    if(!tier)return {row:null,tier:null,after:false};
+    const rows=[...tier.querySelectorAll(':scope > .player[data-index]')].filter(r=>r!==state?.row&&r.offsetParent!==null);
+    const t=targetInRows(rows,y);
+    return {row:t.row,tier,after:t.after};
   }
 
-  function applySameTierPositionReorder(s,tier){
-    const members=s.posOrder.filter(k=>tierVal(s.records.get(k)?.tier)===tierVal(tier));
-    if(members.length<2){restoreCanonicalRanks(s);return false}
-    const memberSet=new Set(members);
-    const dom=domKeysInTier(s.position,tier).filter(k=>memberSet.has(k));
-    if(dom.length!==members.length){restoreCanonicalRanks(s);return false}
+  function markTarget(x,y){
+    clearMarks();
+    const t=resolveTarget(x,y);
+    state.targetRow=t.row;
+    state.targetTier=t.tier;
+    state.after=t.after;
+    if(t.row)t.row.classList.add(t.after?'wh-drop-after':'wh-drop-before');
+    else if(t.tier)t.tier.classList.add('wh-tier-target');
+  }
 
-    const desired=s.posOrder.slice();
-    let j=0;
-    for(let i=0;i<desired.length;i++)if(memberSet.has(desired[i]))desired[i]=dom[j++];
+  function autoScroll(y){
+    const edge=76;
+    if(y<edge)window.scrollBy(0,-Math.max(6,(edge-y)*.3));
+    else if(y>window.innerHeight-edge)window.scrollBy(0,Math.max(6,(y-(window.innerHeight-edge))*.3));
+  }
 
-    const byKey=new Map(players.map(p=>[pKey(p),p]));
-    restoreCanonicalRanks(s);
-    desired.forEach((k,i)=>{
-      const p=byKey.get(k);if(p)p.overall=s.posSlots[i];
-    });
+  function reorderAll(dragged,target,after){
+    const ordered=overallOrder();
+    const slots=ordered.map(p=>num(p.overall)).sort((a,b)=>a-b);
+    const from=ordered.indexOf(dragged);if(from<0)return false;
+    ordered.splice(from,1);
+    let at=target?ordered.indexOf(target):-1;
+    if(at<0)at=ordered.length;else if(after)at+=1;
+    at=Math.max(0,Math.min(at,ordered.length));
+    ordered.splice(at,0,dragged);
+    ordered.forEach((p,i)=>p.overall=slots[i]??(i+1));
     syncPosRanksFromOverall();
     return true;
   }
 
-  const originalCommit=typeof commitVisualOrder==='function'?commitVisualOrder:null;
-  commitVisualOrder=function(){
-    if(fixing)return;
-    if(!dragState?.el||dragState.index==null)return;
+  function reorderPositionSameTier(dragged,target,after,sourceTier){
+    const pos=String(dragged.position||'');
+    if(!target||String(target.position||'')!==pos||!sameTier(target.tier,sourceTier))return false;
+    const posOrder=overallOrder().filter(p=>String(p.position||'')===pos);
+    const slots=posOrder.map(p=>num(p.overall)).sort((a,b)=>a-b);
+    const members=posOrder.filter(p=>sameTier(p.tier,sourceTier));
+    if(members.length<2)return false;
+    const moved=members.filter(p=>p!==dragged);
+    let at=moved.indexOf(target);if(at<0)return false;
+    if(after)at+=1;
+    moved.splice(at,0,dragged);
+    const memberSet=new Set(members);let j=0;
+    const desired=posOrder.map(p=>memberSet.has(p)?moved[j++]:p);
+    desired.forEach((p,i)=>p.overall=slots[i]);
+    syncPosRanksFromOverall();
+    return true;
+  }
 
-    if(rankPos==='ALL'){
-      if(originalCommit)originalCommit();
-      if(syncPosRanksFromOverall())try{save()}catch(_){}
-      try{renderRankings()}catch(_){}
-      dragSnap=null;
-      return;
-    }
-
-    const s=dragSnap;
-    const draggedEl=dragState.el;
-    const dragged=players[dragState.index];
-    if(!s||!dragged){
-      const newTier=tierFromDom(draggedEl);
-      if(dragged)dragged.tier=newTier;
-      syncPosRanksFromOverall();
-      try{save()}catch(_){}
-      const el=dragState.el;dragState={el:null,index:null,startPos:null,startTier:null};
-      if(el)el.classList.remove('dragging');
-      try{renderRankings()}catch(_){}
-      return;
-    }
-
+  function commit(){
+    if(!state?.active||fixing)return;
     fixing=true;
     try{
-      const newTier=tierFromDom(draggedEl);
-      const changedTier=tierVal(newTier)!==tierVal(s.oldTier);
-      restoreCanonicalRanks(s);
-      dragged.tier=newTier;
-
-      if(!changedTier)applySameTierPositionReorder(s,newTier);
-
-      syncPosRanksFromOverall();
+      const dragged=state.player;
+      const target=playerFromRow(state.targetRow);
+      const mode=typeof rankPos==='string'?rankPos:'ALL';
+      if(mode==='ALL'){
+        reorderAll(dragged,target,state.after);
+      }else{
+        const sourceTier=state.sourceTier;
+        const destTier=state.targetTier?tierFromSection(state.targetTier):(target?tierVal(target.tier):sourceTier);
+        if(!sameTier(sourceTier,destTier)){
+          dragged.tier=destTier;
+          syncPosRanksFromOverall();
+        }else{
+          reorderPositionSameTier(dragged,target,state.after,sourceTier);
+        }
+      }
       try{save()}catch(_){}
-      const el=dragState.el;
-      dragState={el:null,index:null,startPos:null,startTier:null};
-      if(el)el.classList.remove('dragging');
-      dragSnap=null;
-      try{renderRankings()}catch(_){}
+      try{renderRankings()}catch(_){try{renderEverything()}catch(__){}}
     }finally{fixing=false}
-  };
-  window.commitVisualOrder=commitVisualOrder;
+  }
+
+  function finish(doCommit){
+    if(!state)return;
+    const wasActive=state.active;
+    if(wasActive&&doCommit)commit();
+    state.row?.classList.remove('wh-pointer-dragging');
+    document.body.classList.remove('wh-ranking-dragging');
+    clearMarks();
+    if(wasActive)suppressClickUntil=Date.now()+350;
+    try{state.row?.releasePointerCapture?.(state.pointerId)}catch(_){}
+    state=null;
+    disableNativeRows();
+  }
+
+  function beginState(e,row,player){
+    state={
+      pointerId:e.pointerId,row,player,active:false,
+      startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,
+      sourceTier:tierVal(player.tier),targetRow:null,targetTier:null,after:false
+    };
+    try{row.setPointerCapture?.(e.pointerId)}catch(_){}
+  }
+
+  document.addEventListener('pointerdown',e=>{
+    if(!isDesktop()||e.button!==0||state)return;
+    const row=e.target.closest?.('#rankList .player[data-index]');
+    if(!row)return;
+    if(e.target.closest?.('button,input,textarea,select,a,[contenteditable="true"]'))return;
+    row.draggable=false;
+    const player=playerFromRow(row);if(!player)return;
+    beginState(e,row,player);
+  },true);
+
+  document.addEventListener('pointermove',e=>{
+    if(!state||e.pointerId!==state.pointerId)return;
+    state.lastX=e.clientX;state.lastY=e.clientY;
+    if(!state.active){
+      if(Math.hypot(e.clientX-state.startX,e.clientY-state.startY)<5)return;
+      state.active=true;
+      state.row.classList.add('wh-pointer-dragging');
+      document.body.classList.add('wh-ranking-dragging');
+    }
+    e.preventDefault();
+    markTarget(e.clientX,e.clientY);
+    autoScroll(e.clientY);
+  },true);
+
+  document.addEventListener('pointerup',e=>{
+    if(!state||e.pointerId!==state.pointerId)return;
+    if(state.active){e.preventDefault();markTarget(e.clientX,e.clientY)}
+    finish(true);
+  },true);
+  document.addEventListener('pointercancel',e=>{if(state&&e.pointerId===state.pointerId)finish(false)},true);
+
+  // Kill the old HTML5 drag path on desktop so two drag engines can never compete.
+  document.addEventListener('dragstart',e=>{
+    if(!isDesktop())return;
+    if(e.target.closest?.('#rankList .player[data-index]')){e.preventDefault();e.stopImmediatePropagation()}
+  },true);
+  document.addEventListener('dragover',e=>{
+    if(!isDesktop())return;
+    if(e.target.closest?.('#rankList')){e.preventDefault();e.stopImmediatePropagation()}
+  },true);
+  document.addEventListener('drop',e=>{
+    if(!isDesktop())return;
+    if(e.target.closest?.('#rankList')){e.preventDefault();e.stopImmediatePropagation()}
+  },true);
+
+  document.addEventListener('click',e=>{
+    if(Date.now()<suppressClickUntil&&e.target.closest?.('#rankList .player[data-index]')){
+      e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+    }
+  },true);
+
+  installRowGuard();
+  if(!document.getElementById('rankList')){
+    const boot=new MutationObserver(()=>{if(document.getElementById('rankList')){installRowGuard();boot.disconnect()}});
+    boot.observe(document.documentElement,{childList:true,subtree:true});
+  }
 
   setTimeout(()=>{
     if(fixing||!Array.isArray(players))return;
@@ -213,5 +283,6 @@
       try{save()}catch(_){}
       try{renderRankings()}catch(_){}
     }
+    disableNativeRows();
   },350);
 })();
