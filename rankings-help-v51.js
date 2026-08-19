@@ -1,4 +1,4 @@
-// v75.3 — clearer rankings helper copy + bold player detail hints on My Rankings and Sleeper ADP + mobile touch-drag loader.
+// v75.4 — clearer rankings helper copy + bold player detail hints on My Rankings and Current ADP + mobile touch-drag loader.
 (()=>{
   const mobileTouch=()=>window.matchMedia?.('(max-width: 820px)').matches&&(navigator.maxTouchPoints||0)>0;
   const copy=mobileTouch()
@@ -19,38 +19,19 @@
     if(el.textContent!==hint)el.textContent=hint;
   }
 
-  function findSleeperAdpPage(){
-    const pages=[...document.querySelectorAll('[id^="page-"]')];
-    let page=pages.find(section=>{
-      const head=section.querySelector('.pagehead');
-      return /sleeper\s+(?:adp|rankings)/i.test((head?.textContent||'').trim());
-    });
-    if(page)return page;
-
-    const tab=[...document.querySelectorAll('button,a,[role="tab"],[data-page]')].find(el=>/^sleeper\s+adp$/i.test((el.textContent||'').trim()));
-    if(tab){
-      const raw=tab.dataset.page||tab.getAttribute('aria-controls')||(tab.getAttribute('href')||'').replace(/^#/,'');
-      if(raw){
-        page=document.getElementById(raw)||document.getElementById('page-'+raw);
-        if(page)return page;
-      }
-    }
-
-    return pages.find(section=>/sleeper\s+adp/i.test((section.textContent||'').slice(0,700)))||null;
-  }
-
   const apply=()=>{
     const myHead=document.querySelector('#page-rankings .pagehead');
     const p=myHead?.querySelector('p');
     if(p&&p.textContent!==copy)p.textContent=copy;
     addHint(myHead,'my-rankings');
 
-    const sleeperPage=findSleeperAdpPage();
-    if(sleeperPage)addHint(sleeperPage.querySelector('.pagehead')||sleeperPage,'sleeper-adp');
+    // Current ADP is the real Sleeper ADP screen in the app.
+    const currentAdpHead=document.querySelector('#page-adp .pagehead');
+    addHint(currentAdpHead,'current-adp');
   };
 
   apply();
-  [250,900,2200].forEach(ms=>setTimeout(apply,ms));
+  [250,900,2200,5000].forEach(ms=>setTimeout(apply,ms));
 
   if(mobileTouch()&&!document.querySelector('script[data-mobile-touch-v75]')){
     const s=document.createElement('script');
