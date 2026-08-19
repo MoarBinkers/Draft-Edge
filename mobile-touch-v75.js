@@ -1,18 +1,20 @@
-// v75 — mobile-only touch reordering for My Rankings. Desktop drag behavior is unchanged.
+// v75.1 — deliberate long-press mobile ranking reorder with clean tap/profile separation.
 (()=>{
   const MOBILE_QUERY='(max-width: 820px)';
+  const HOLD_MS=280;
+  const MOVE_CANCEL=12;
   const isMobileTouch=()=>window.matchMedia?.(MOBILE_QUERY).matches && (navigator.maxTouchPoints||0)>0;
   if(!isMobileTouch()) return;
 
   const style=document.createElement('style');
-  style.id='workhorse-mobile-touch-v75';
+  style.id='workhorse-mobile-touch-v751';
   style.textContent=`
     @media (max-width:820px){
       html,body{overflow-x:hidden}
       #rankList,.player.rankings{max-width:100%;box-sizing:border-box}
-      #rankList .player.rankings[data-index]{-webkit-user-select:none;user-select:none}
+      #rankList .player.rankings[data-index]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
       #rankList .player.rankings.mobile-touch-dragging{opacity:.34}
-      .mobile-touch-ghost{position:fixed!important;z-index:2147483000!important;pointer-events:none!important;margin:0!important;opacity:.96!important;box-shadow:0 18px 42px rgba(0,0,0,.42)!important;transform:scale(.985);}
+      .mobile-touch-ghost{position:fixed!important;z-index:2147483000!important;pointer-events:none!important;margin:0!important;opacity:.96!important;box-shadow:0 18px 42px rgba(0,0,0,.42)!important;transform:scale(.985)}
       #rankList .player.rankings.mobile-drop-before{box-shadow:inset 0 3px 0 #60a5fa!important}
       #rankList .player.rankings.mobile-drop-after{box-shadow:inset 0 -3px 0 #60a5fa!important}
       #rankList .tier-drop.mobile-tier-drop{outline:2px solid rgba(96,165,250,.72);outline-offset:-2px}
@@ -58,6 +60,7 @@
     ghost.classList.add('mobile-touch-ghost');
     ghost.classList.remove('mobile-touch-dragging','mobile-drop-before','mobile-drop-after');
     ghost.removeAttribute('draggable');
+    ghost.querySelectorAll?.('[id]').forEach(el=>el.removeAttribute('id'));
     ghost.style.width=rect.width+'px';
     ghost.style.height=rect.height+'px';
     ghost.style.left=rect.left+'px';
@@ -74,6 +77,7 @@
     state.ghost=g.ghost;
     state.ghostHeight=g.rect.height;
     state.grabX=g.grabX;
+    suppressClickUntil=Date.now()+500;
     try{navigator.vibrate?.(8)}catch(_){}
   }
 
@@ -108,18 +112,17 @@
     else if(y>window.innerHeight-edge)window.scrollBy(0,Math.max(6,(y-(window.innerHeight-edge))*.26));
   }
 
-  function reorderAll(dragged,target,after,destTier){
+  function reorderAll(dragged,target,after){
     const ordered=overallOrder();
-    const from=ordered.indexOf(dragged);
-    if(from<0)return;
+    const slots=ordered.map(p=>num(p.overall)).sort((a,b)=>a-b);
+    const from=ordered.indexOf(dragged);if(from<0)return false;
     ordered.splice(from,1);
     let at=target?ordered.indexOf(target):-1;
-    if(at<0)at=ordered.length;
-    else if(after)at+=1;
+    if(at<0)at=ordered.length;else if(after)at+=1;
     ordered.splice(Math.max(0,Math.min(at,ordered.length)),0,dragged);
-    ordered.forEach((p,i)=>p.overall=i+1);
-    if(destTier!==undefined)dragged.tier=destTier;
+    ordered.forEach((p,i)=>p.overall=slots[i]??(i+1));
     syncPosRanks();
+    return true;
   }
 
   function reorderPositionSameTier(dragged,target,after,sourceTier){
@@ -127,19 +130,16 @@
     const posOrder=overallOrder().filter(p=>String(p.position||'')===pos);
     const slots=posOrder.map(p=>num(p.overall)).sort((a,b)=>a-b);
     const members=posOrder.filter(p=>sameTier(p.tier,sourceTier));
-    if(members.length<2||!target||String(target.position||'')!==pos||!sameTier(target.tier,sourceTier))return;
-
+    if(members.length<2||!target||String(target.position||'')!==pos||!sameTier(target.tier,sourceTier))return false;
     const reordered=members.filter(p=>p!==dragged);
-    let at=reordered.indexOf(target);
-    if(at<0)return;
+    let at=reordered.indexOf(target);if(at<0)return false;
     if(after)at+=1;
     reordered.splice(at,0,dragged);
-
-    const memberSet=new Set(members);
-    let j=0;
+    const memberSet=new Set(members);let j=0;
     const desired=posOrder.map(p=>memberSet.has(p)?reordered[j++]:p);
     desired.forEach((p,i)=>p.overall=slots[i]);
     syncPosRanks();
+    return true;
   }
 
   function commitDrop(){
@@ -149,36 +149,33 @@
     const sourceTier=tierVal(state.sourceTier);
     const destTier=state.targetTier?tierFromEl(state.targetTier):(target?tierVal(target.tier):sourceTier);
     const mode=typeof rankPos==='string'?rankPos:'ALL';
-
     if(mode==='ALL'){
-      reorderAll(dragged,target,state.after,state.targetTier?destTier:undefined);
+      reorderAll(dragged,target,state.after);
+    }else if(!sameTier(sourceTier,destTier)){
+      dragged.tier=destTier;
+      syncPosRanks();
     }else{
-      const changedTier=!sameTier(sourceTier,destTier);
-      if(changedTier){
-        dragged.tier=destTier;
-        syncPosRanks();
-      }else{
-        reorderPositionSameTier(dragged,target,state.after,sourceTier);
-      }
+      reorderPositionSameTier(dragged,target,state.after,sourceTier);
     }
     saveAndRender();
   }
 
   function finish(commit){
     if(!state)return;
-    clearTimeout(state.holdTimer);
-    if(state.active&&commit)commitDrop();
-    if(state.row?.isConnected)state.row.classList.remove('mobile-touch-dragging');
-    state.ghost?.remove();
+    const current=state;
+    clearTimeout(current.holdTimer);
+    if(current.active&&commit)commitDrop();
+    if(current.row?.isConnected)current.row.classList.remove('mobile-touch-dragging');
+    current.ghost?.remove();
     clearMarks();
-    if(state.active)suppressClickUntil=Date.now()+450;
+    if(current.active)suppressClickUntil=Date.now()+450;
     state=null;
   }
 
   document.addEventListener('touchstart',e=>{
     if(!isMobileTouch()||e.touches.length!==1||state)return;
     const row=e.target.closest?.('#rankList .player.rankings[data-index]');
-    if(!row||row.getAttribute('draggable')==='false')return;
+    if(!row)return;
     if(e.target.closest?.('button,input,textarea,select,a,[contenteditable="true"]'))return;
     const player=playerFromRow(row);if(!player)return;
     const t=e.touches[0];
@@ -190,14 +187,14 @@
       if(!state)return;
       const fake={clientX:state.lastX,clientY:state.lastY};
       activateDrag(fake);markTarget(fake);
-    },170);
+    },HOLD_MS);
   },{capture:true,passive:true});
 
   document.addEventListener('touchmove',e=>{
     if(!state||e.touches.length!==1)return;
     const t=e.touches[0];state.lastX=t.clientX;state.lastY=t.clientY;
     if(!state.active){
-      if(Math.hypot(t.clientX-state.startX,t.clientY-state.startY)>10){clearTimeout(state.holdTimer);state=null}
+      if(Math.hypot(t.clientX-state.startX,t.clientY-state.startY)>MOVE_CANCEL){clearTimeout(state.holdTimer);state=null}
       return;
     }
     e.preventDefault();
@@ -209,9 +206,16 @@
     if(state.active)e.preventDefault();
     finish(true);
   },{capture:true,passive:false});
-
   document.addEventListener('touchcancel',()=>finish(false),{capture:true,passive:true});
+  window.addEventListener('blur',()=>finish(false));
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)finish(false)});
 
+  document.addEventListener('dragstart',e=>{
+    if(isMobileTouch()&&e.target.closest?.('#rankList .player.rankings[data-index]'))e.preventDefault();
+  },true);
+  document.addEventListener('contextmenu',e=>{
+    if((state?.active||Date.now()<suppressClickUntil)&&e.target.closest?.('#rankList .player.rankings[data-index]'))e.preventDefault();
+  },true);
   document.addEventListener('click',e=>{
     if(Date.now()<suppressClickUntil&&e.target.closest?.('#rankList .player.rankings[data-index]')){
       e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
