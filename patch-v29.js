@@ -1,4 +1,4 @@
-// v29.1 — foundational player normalization, market matching, rows, import/export, and list sanitation.
+// v29.2 — foundational normalization, market matching, list sanitation, and synced-player exclusions.
 (()=>{
   function cleanPlayerName(value){
     let s=String(value||"").trim().replace(/\s+/g," ");
@@ -46,19 +46,33 @@
     const edge=m?.rank!=null?m.rank-p.overall:null;
     const draftControl=mode==="draft"?'<button class="draft-btn" onclick="event.stopPropagation();toggleDraft('+i+')">Draft</button>':"";
     return '<div class="player rankings '+(mode==="draft"&&p.drafted?"drafted":"")+'" draggable="'+(mode==="rankings")+'" data-index="'+i+'">'+
-    '<div class="person" onclick="openDetail('+i+')"><img class="avatar" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div class="playertext"><div class="name-line"><span class="name">'+esc(cleanPlayerName(p.name))+'</span><span class="tags">'+tagsHtml(p)+'</span>'+noteHtml(p,i)+'</div><div class="meta"><span class="pos '+p.position+'">'+p.position+'</span><span>'+esc(p.team)+'</span><span>Bye '+esc(p.bye)+'</span>'+draftControl+'</div>'+notePreview(p)+'</div></div>'+
+    '<div class="person" onclick="openDetail('+i+')"><img class="avatar" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div class="playertext"><div class="name-line"><span class="name">'+esc(cleanPlayerName(p.name))+'</span><span class="tags">'+tagsHtml(p)+'</span>'+noteHtml(p,i)+'</div><div class="meta"><span class="pos '+p.position+'">'+p.position+'</span><span>'+esc(p.team||'—')+'</span><span>Bye '+esc(p.bye)+'</span>'+draftControl+'</div>'+notePreview(p)+'</div></div>'+
     '<div class="metric"><div class="num">#'+myPrimary+'</div></div><div class="metric"><div class="num">'+(rankPos==="ALL"?p.position+"#"+p.posRank:"#"+mySecondary)+'</div></div><div class="metric"><div class="num">'+(m?.rank!=null?"#"+m.rank:"—")+'</div></div><div class="metric"><div class="edge '+(edge==null?"":edge>0?"good":edge<0?"bad":"")+'">'+(edge==null?"—":(edge>0?"+":"")+edge)+'</div></div><div class="metric"><div class="move '+mv.cls+'">'+mv.text+'</div></div></div>';
   };
 
   marketRow=function(p){
     const owned=findPersonalByName(p.name),i=owned?players.indexOf(owned):-1,m=marketFor(p),mv=moveText(p);
     const add=i<0?'<button class="market-add" data-market-add="'+esc(p.name)+'">＋ Add</button>':"";
-    return '<div class="player market"><div class="person" data-market-player="'+encodeURIComponent(p.name)+'"><img class="avatar" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div class="playertext"><div class="name-line"><span class="name">'+esc(cleanPlayerName(p.name))+'</span><span class="tags">'+(owned?tagsHtml(owned):"")+'</span>'+(owned?noteHtml(owned,i):"")+'</div><div class="meta"><span class="pos '+p.position+'">'+p.position+'</span><span>'+esc(p.team||"FA")+'</span>'+add+'</div>'+(owned?notePreview(owned):"")+'</div></div><div class="metric"><div class="num">'+(m?.rank!=null?"#"+m.rank:"—")+'</div></div><div class="metric"><div class="num">'+(m?.posRank?p.position+"#"+m.posRank:"—")+'</div></div><div class="metric"><div class="move '+mv.cls+'">'+mv.text+'</div></div></div>';
+    return '<div class="player market"><div class="person" data-market-player="'+encodeURIComponent(p.name)+'"><img class="avatar" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div class="playertext"><div class="name-line"><span class="name">'+esc(cleanPlayerName(p.name))+'</span><span class="tags">'+(owned?tagsHtml(owned):"")+'</span>'+(owned?noteHtml(owned,i):"")+'</div><div class="meta"><span class="pos '+p.position+'">'+p.position+'</span><span>'+esc(p.team||"—")+'</span>'+add+'</div>'+(owned?notePreview(owned):"")+'</div></div><div class="metric"><div class="num">'+(m?.rank!=null?"#"+m.rank:"—")+'</div></div><div class="metric"><div class="num">'+(m?.posRank?p.position+"#"+m.posRank:"—")+'</div></div><div class="metric"><div class="move '+mv.cls+'">'+mv.text+'</div></div></div>';
   };
+
+  function listRef(){try{return typeof currentList==='function'?currentList():rankingLists?.[activeListId]||null}catch(_){return null}}
+  function playerSleeperId(p){try{return String(p?.sleeperId||marketFor(p)?.id||'')}catch(_){return String(p?.sleeperId||'')}}
+  function excludeFromAutoSync(p){
+    const id=playerSleeperId(p),list=listRef();if(!id||!list)return;
+    const ids=Array.isArray(list.excludedSleeperIds)?list.excludedSleeperIds.map(String):[];
+    if(!ids.includes(id))ids.push(id);
+    list.excludedSleeperIds=ids;
+  }
+  function allowAutoSyncAgain(value){
+    const m=marketMatch(value),id=String(m?.entry?.id||''),list=listRef();if(!id||!list||!Array.isArray(list.excludedSleeperIds))return;
+    list.excludedSleeperIds=list.excludedSleeperIds.map(String).filter(x=>x!==id);
+  }
 
   function removePlayer(i){
     const p=players[i];if(!p)return;
     if(!confirm('Remove "'+cleanPlayerName(p.name)+'" from this ranking list?'))return;
+    excludeFromAutoSync(p);
     const pos=p.position;players.splice(i,1);
     players.slice().sort((a,b)=>(Number(a.overall)||99999)-(Number(b.overall)||99999)).forEach((x,n)=>x.overall=n+1);
     players.filter(x=>x.position===pos).sort((a,b)=>(Number(a.posRank)||9999)-(Number(b.posRank)||9999)).forEach((x,n)=>x.posRank=n+1);
@@ -71,13 +85,14 @@
   if(adpList&&!adpList.dataset.v29Click){
     adpList.dataset.v29Click="1";
     adpList.addEventListener("click",e=>{
-      if(e.target.closest("[data-market-add]"))return;
+      const addBtn=e.target.closest("[data-market-add]");
+      if(addBtn){allowAutoSyncAgain(addBtn.dataset.marketAdd);return}
       const row=e.target.closest("[data-market-player]");
       if(row&&typeof openMarketDetail==='function')openMarketDetail(decodeURIComponent(row.dataset.marketPlayer));
     });
   }
 
-  playerTemplate=function(src,overall,posRank){return {overall,name:cleanPlayerName(src.name),position:src.position||src.pos||"NA",team:src.team||"FA",bye:src.bye??"—",posRank,tier:null,tags:[],note:"",drafted:false,sleeperId:src.id||src.sleeperId||null}};
+  playerTemplate=function(src,overall,posRank){return {overall,name:cleanPlayerName(src.name),position:src.position||src.pos||"NA",team:src.team||"—",bye:src.bye??"—",posRank,tier:null,tags:[],note:"",drafted:false,sleeperId:src.id||src.sleeperId||null}};
 
   function sanitizeCurrentPlayers(){
     const seen=new Set();let changed=false;const next=[];
@@ -95,7 +110,7 @@
   }
 
   const oldLoadActiveList=loadActiveList;
-  loadActiveList=function(){oldLoadActiveList();sanitizeCurrentPlayers()};
+  loadActiveList=function(){oldLoadActiveList();sanitizeCurrentPlayers();setTimeout(()=>window.WorkhorseReconcileSleeperRankings?.(),0)};
 
   const oldConfirmImportList=confirmImportList;
   confirmImportList=async function(){
