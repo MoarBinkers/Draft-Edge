@@ -1,12 +1,14 @@
-// v41 — Sleeper-connected draft room: format detection, pick tracking, true value, market timing, roster context, filters, and injury status.
+// v41.1 — Sleeper-connected draft room with capped, deduplicated injury/status loading.
 (()=>{
   const INPUT_KEY='de34_draft_input';
   const SMART_KEY='de41_draft_filter';
   const STATUS_TTL=15*60*1000;
+  const STATUS_LIMIT=500;
+  const STATUS_BATCH=150;
   const htmlEsc=v=>typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const signed=n=>Number(n)>0?'+'+Number(n):String(Number(n)||0);
   let smartFilter=localStorage.getItem(SMART_KEY)||'all';
-  let statusClient=null,statusLoadedAt=0;
+  let statusClient=null,statusLoadedAt=0,statusLoading=null;
   const playerStatus=new Map();
   let connected={id:'',draft:null,league:null,picks:[],traded:[],slot:null,rosterId:null,format:'ppr',scoringLabel:'Full PPR',timer:null,lastChecked:null};
 
@@ -35,17 +37,42 @@
     return null;
   }
 
+  function relevantStatusIds(){
+    const ids=[],seen=new Set();
+    const add=p=>{
+      if(ids.length>=STATUS_LIMIT||!p)return;
+      let id='';
+      try{id=String(marketFor(p)?.id||p?.sleeperId||p?.id||'')}catch(_){id=String(p?.sleeperId||p?.id||'')}
+      if(!id||seen.has(id))return;seen.add(id);ids.push(id);
+    };
+    try{(Array.isArray(players)?players.slice().sort((a,b)=>(Number(a?.overall)||99999)-(Number(b?.overall)||99999)):[]).forEach(add)}catch(_){}
+    try{(Array.isArray(sleeperPool)?sleeperPool:[]).forEach(add)}catch(_){}
+    return ids.slice(0,STATUS_LIMIT);
+  }
+
   async function loadPlayerStatus(force=false){
+    if(statusLoading)return statusLoading;
     if(!force&&playerStatus.size&&Date.now()-statusLoadedAt<STATUS_TTL)return;
     const client=getStatusClient();if(!client)return;
-    let from=0,all=[];
-    while(true){
-      const {data,error}=await client.from('sleeper_player_status').select('player_id,status,injury_status,injury_body_part,team,updated_at').range(from,from+999);
-      if(error){console.warn('Sleeper injury status unavailable',error);return}
-      const batch=Array.isArray(data)?data:[];all.push(...batch);if(batch.length<1000)break;from+=1000;
-    }
-    playerStatus.clear();all.forEach(r=>playerStatus.set(String(r.player_id),r));statusLoadedAt=Date.now();
-    try{renderAdp();renderRankings();renderDraft()}catch(_){}
+    const ids=relevantStatusIds();if(!ids.length)return;
+    statusLoading=(async()=>{
+      try{
+        const batches=[];
+        for(let i=0;i<ids.length;i+=STATUS_BATCH)batches.push(ids.slice(i,i+STATUS_BATCH));
+        const results=await Promise.all(batches.map(batch=>client.from('sleeper_player_status')
+          .select('player_id,status,injury_status,injury_body_part,team,updated_at')
+          .in('player_id',batch)));
+        const all=[];
+        for(const result of results){
+          if(result?.error)throw result.error;
+          if(Array.isArray(result?.data))all.push(...result.data);
+        }
+        playerStatus.clear();all.forEach(r=>playerStatus.set(String(r.player_id),r));statusLoadedAt=Date.now();
+        try{renderAdp();renderRankings();renderDraft()}catch(_){}
+      }catch(error){console.warn('Sleeper injury status unavailable',error)}
+      finally{statusLoading=null}
+    })();
+    return statusLoading;
   }
 
   function statusFor(p){
@@ -171,7 +198,7 @@
   const oldToggle=typeof toggleDraft==='function'?toggleDraft:null;
   toggleDraft=function(i){
     const p=players?.[i];if(!p)return;
-    if(p.drafted&&p.draftedSource==='sleeper'&&connected.id&&p.draftedDraftId===connected.id){alert('Sleeper still has this player drafted. Draft Edge will make them available automatically if that Sleeper pick is removed.');return}
+    if(p.drafted&&p.draftedSource==='sleeper'&&connected.id&&p.draftedDraftId===connected.id){alert('Sleeper still has this player drafted. Workhorse will make them available automatically if that Sleeper pick is removed.');return}
     p.drafted=!p.drafted;p.draftedAt=p.drafted?Date.now():null;p.draftedSource=p.drafted?'manual':null;p.draftedDraftId=null;p.draftedPickNo=null;save();renderTagDrawer();renderDraft();if(document.getElementById('draftedModal')?.classList.contains('open'))renderDraftedModal();
   };window.toggleDraft=toggleDraft;
 
@@ -317,6 +344,7 @@
       const detected=detectFormat(draft,league);connected.format=detected.format;connected.scoringLabel=detected.label;
       localStorage.setItem(INPUT_KEY,raw);populateSlotSelect();
       if(typeof window.setDraftEdgeAdpFormat==='function')try{await window.setDraftEdgeAdpFormat(detected.format)}catch(e){console.warn('Could not switch ADP format',e)}
+      await loadPlayerStatus().catch(()=>{});
       const list=currentList?.();if(list){list.draftPrefs={...(list.draftPrefs||{}),input:raw,draftId:connected.id,slot:connected.slot||null};try{save()}catch(_){}}
       await refreshConnected();connected.timer=setInterval(refreshConnected,15000);try{draftTimer=connected.timer}catch(_){}
     }catch(e){if(state)state.textContent='Connection error: '+e.message}
@@ -333,6 +361,8 @@
   const input=document.getElementById('draftId'),connect=document.getElementById('connectDraft'),stop=document.getElementById('stopDraft');
   if(input){input.placeholder='Paste Sleeper draft link, Draft ID, or League ID';input.style.maxWidth='390px';const listPref=currentList?.()?.draftPrefs?.input,saved=listPref||localStorage.getItem(INPUT_KEY);if(saved&&!input.value)input.value=saved;input.onkeydown=e=>{if(e.key==='Enter')connectDraft41()}}
   if(connect)connect.onclick=connectDraft41;if(stop)stop.onclick=stopDraft41;
-  loadPlayerStatus().catch(()=>{});
-  setTimeout(()=>{loadPlayerStatus().catch(()=>{});renderDraft()},700);
+  const kickStatusLoad=()=>loadPlayerStatus().catch(()=>{});
+  if(window.WorkhorseCentralAdpReady)setTimeout(kickStatusLoad,100);
+  else window.addEventListener('workhorse:central-adp-ready',()=>setTimeout(kickStatusLoad,100),{once:true});
+  setTimeout(()=>{kickStatusLoad();renderDraft()},1800);
 })();
