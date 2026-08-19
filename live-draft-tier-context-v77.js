@@ -1,4 +1,4 @@
-// v77 — optional, non-invasive tier context for Live Draft.
+// v77.1 — optional, non-invasive position-specific tier context for Live Draft.
 (()=>{
   const PREF_KEY='workhorse_live_draft_tier_context_v1';
   let enabled=localStorage.getItem(PREF_KEY)==='1';
@@ -161,7 +161,7 @@
     detail.className='wh-tier-detail';
     detail.dataset.tierContextDetail=key;
     detail.innerHTML=
-      '<div class="wh-tier-detail-head"><div class="wh-tier-detail-title">'+esc(info.pos)+' · '+esc(info.name)+'</div><div class="wh-tier-detail-count">'+members.length+' available</div></div>'+ 
+      '<div class="wh-tier-detail-head"><div class="wh-tier-detail-title">'+esc(info.pos)+' '+esc(info.name)+' — '+members.length+' AVAILABLE</div></div>'+ 
       '<div class="wh-tier-members"></div>';
     const memberRoot=detail.querySelector('.wh-tier-members');
     members.forEach(p=>{
@@ -201,8 +201,8 @@
       badge.className='wh-tier-badge'+(members.length===1?' last':'');
       badge.dataset.tierContextKey=key;
       badge.textContent=members.length===1
-        ? info.name.toUpperCase()+' · LAST IN TIER'
-        : info.name.toUpperCase()+' · '+members.length+' LEFT';
+        ? info.pos.toUpperCase()+' '+info.name.toUpperCase()+' · LAST IN TIER'
+        : info.pos.toUpperCase()+' '+info.name.toUpperCase()+' · '+members.length+' LEFT';
       badge.title='Show available players in '+info.pos+' '+info.name;
       badge.onclick=e=>{
         e.preventDefault();e.stopPropagation();
