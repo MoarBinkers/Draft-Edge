@@ -1,8 +1,9 @@
-// v82.0 — restore the signed-in user's last synced rankings immediately, then refresh cloud state in the background.
+// v82.1 — restore the signed-in user's last synced rankings immediately, then refresh cloud state in the background.
 (()=>{
   const PREFIX='de82_cloud_rankings_';
   const LEGACY_KEY='de41_cloud_cache';
   let installed=false,saveWrapped=false,persistWrapped=false,saveTimer=null;
+  let activeSync=null,activeSyncUser='';
 
   const userId=()=>{try{return currentUser?.id?String(currentUser.id):''}catch(_){return ''}};
   const scopedKey=()=>{const id=userId();return id?PREFIX+id:''};
@@ -112,12 +113,20 @@
       wrapSave();wrapPersist();
       if(installed||typeof loadCloudLists!=='function')return installed;
       const base=loadCloudLists;
-      const wrapped=async function(){
-        let restored=restoreScoped();
-        if(!restored)restored=await migrateLegacyIfOwned();
-        const out=await base.apply(this,arguments);
-        saveSnapshot();
-        return out;
+      const wrapped=function(){
+        const id=userId();
+        if(activeSync&&activeSyncUser===id)return activeSync;
+        const args=arguments,ctx=this;
+        const run=(async()=>{
+          let restored=restoreScoped();
+          if(!restored)restored=await migrateLegacyIfOwned();
+          const out=await base.apply(ctx,args);
+          saveSnapshot();
+          return out;
+        })();
+        activeSync=run;activeSyncUser=id;
+        run.finally(()=>{if(activeSync===run){activeSync=null;activeSyncUser=''}}).catch(()=>{});
+        return run;
       };
       wrapped.__workhorseFastStart=true;
       loadCloudLists=wrapped;
@@ -131,13 +140,21 @@
     }
   }
 
+  function maybeStartSync(){
+    try{
+      if(!installed||!userId()||!supabaseClient||typeof loadCloudLists!=='function')return;
+      loadCloudLists().catch(e=>console.warn('Workhorse early cloud sync skipped',e));
+    }catch(_){}
+  }
+
   install();
-  [80,250,700,1400].forEach(ms=>setTimeout(()=>{install();if(userId())restoreScoped()},ms));
+  maybeStartSync();
+  [80,250,700,1400].forEach(ms=>setTimeout(()=>{install();if(userId())restoreScoped();maybeStartSync()},ms));
   window.addEventListener('beforeunload',saveSnapshot);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveSnapshot()});
   document.addEventListener('change',()=>scheduleSave(250));
   document.addEventListener('click',e=>{
     if(e.target?.closest?.('#workhorseDeleteListBtn'))[900,2200,4500].forEach(ms=>setTimeout(saveSnapshot,ms));
   });
-  window.WorkhorseCloudFastStart={restore:restoreScoped,save:saveSnapshot};
+  window.WorkhorseCloudFastStart={restore:restoreScoped,save:saveSnapshot,sync:maybeStartSync};
 })();
