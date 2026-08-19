@@ -1,8 +1,9 @@
-// v36.1 — multi-format Sleeper-only redraft ADP with shared per-format history.
+// v36.2 — live Sleeper ADP plus non-destructive ranking/team reconciliation.
 (()=>{
   const HISTORY_KEY='de29_adp_history';
   const FORMAT_KEY='de36_adp_format';
   const HISTORY_TTL=5*60*1000;
+  const AUTO_RANK_LIMIT=300;
   const FORMATS={
     ppr:{label:'Full PPR',short:'PPR'},
     half_ppr:{label:'Half PPR',short:'Half PPR'},
@@ -11,7 +12,7 @@
   let activeFormat=FORMATS[localStorage.getItem(FORMAT_KEY)]?localStorage.getItem(FORMAT_KEY):'ppr';
   let centralClient=null;
   let activeRows=[];
-  let applying=false;
+  let applying=false,reconciling=false;
   const historyCache=new Map();
 
   function getClient(){
@@ -24,8 +25,67 @@
   }
   const clean=v=>typeof cleanPlayerName==='function'?cleanPlayerName(v):String(v||'').trim();
   const nrm=v=>typeof norm==='function'?norm(v):clean(v).toLowerCase().replace(/[^a-z0-9]/g,'');
+  const teamText=v=>{const s=String(v||'').trim();return s&&s.toUpperCase()!=='FA'?s:'—'};
   const setText=(id,text)=>{const el=document.getElementById(id);if(el)el.textContent=text};
   const fmtTime=v=>{const d=v?new Date(v):null;return d&&!Number.isNaN(d.getTime())?d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):''};
+
+  function activeList(){try{return typeof currentList==='function'?currentList():rankingLists?.[activeListId]||null}catch(_){return null}}
+  function excludedIds(list){
+    if(!list)return new Set();
+    if(!Array.isArray(list.excludedSleeperIds))list.excludedSleeperIds=[];
+    return new Set(list.excludedSleeperIds.map(String));
+  }
+
+  function reconcileCurrentRankings(rows){
+    if(reconciling||!Array.isArray(rows)||!rows.length)return false;
+    let list=activeList();
+    try{if(!list||!Array.isArray(players)||players.length<100)return false}catch(_){return false}
+    reconciling=true;
+    try{
+      const byId=new Map(),byName=new Map();
+      for(const r of rows){
+        const id=String(r.player_id||'');if(id)byId.set(id,r);
+        const key=nrm(r.full_name);if(key&&!byName.has(key))byName.set(key,r);
+      }
+      let changed=false;
+      const existingIds=new Set(),existingNames=new Set();
+      for(const p of players){
+        const id=String(p?.sleeperId||'');
+        const row=(id&&byId.get(id))||byName.get(nrm(p?.name));
+        if(row){
+          const rowId=String(row.player_id||'');
+          if(rowId&&!p.sleeperId){p.sleeperId=rowId;changed=true}
+          const currentTeam=String(p.team||'').trim();
+          const liveTeam=String(row.team||'').trim();
+          if(liveTeam&&liveTeam.toUpperCase()!=='FA'&&currentTeam!==liveTeam){p.team=liveTeam;changed=true}
+          else if((!currentTeam||currentTeam.toUpperCase()==='FA')&&!liveTeam){p.team='—';changed=true}
+        }
+        const finalId=String(p?.sleeperId||'');if(finalId)existingIds.add(finalId);
+        existingNames.add(nrm(p?.name));
+      }
+
+      const excluded=excludedIds(list);
+      let maxOverall=players.reduce((m,p)=>Math.max(m,Number(p?.overall)||0),0);
+      const posCounts={};
+      for(const p of players){const pos=String(p?.position||'');posCounts[pos]=(posCounts[pos]||0)+1}
+      const incoming=rows.filter(r=>['QB','RB','WR','TE'].includes(String(r.position||'').toUpperCase())&&Number(r.sleeper_rank)>0&&Number(r.sleeper_rank)<=AUTO_RANK_LIMIT)
+        .sort((a,b)=>Number(a.sleeper_rank)-Number(b.sleeper_rank));
+      for(const r of incoming){
+        const id=String(r.player_id||''),name=clean(r.full_name),key=nrm(name),pos=String(r.position||'').toUpperCase();
+        if(!id||!name||existingIds.has(id)||existingNames.has(key)||excluded.has(id))continue;
+        posCounts[pos]=(posCounts[pos]||0)+1;
+        players.push({overall:++maxOverall,name,position:pos,team:teamText(r.team),bye:'—',posRank:posCounts[pos],tier:null,tags:[],note:'',drafted:false,draftedAt:null,draftedSource:null,draftedDraftId:null,draftedPickNo:null,sleeperId:id});
+        existingIds.add(id);existingNames.add(key);changed=true;
+      }
+      if(changed){
+        list.players=players;list.updatedAt=Date.now();
+        try{if(activeListId&&rankingLists?.[activeListId])rankingLists[activeListId]=list}catch(_){}
+        try{save()}catch(e){console.warn('Workhorse ranking reconciliation save failed',e)}
+      }
+      return changed;
+    }finally{reconciling=false}
+  }
+  window.WorkhorseReconcileSleeperRankings=()=>reconcileCurrentRankings(activeRows);
 
   function applyRows(rows){
     if(applying||!Array.isArray(rows)||!rows.length)return;
@@ -36,13 +96,14 @@
       const pool=[];
       for(const r of rows){
         const name=clean(r.full_name);if(!name)continue;
-        const pos=String(r.position||'').toUpperCase();
-        target[name]={id:String(r.player_id),rank:Number(r.sleeper_rank),posRank:Number(r.position_rank),team:r.team||'FA',pos,adp:Number(r.sleeper_adp),searchRank:Number(r.sleeper_adp),move:Number(r.rank_change)||0,updatedAt:r.captured_at?new Date(r.captured_at).getTime():Date.now(),central:true,format:activeFormat};
-        if(['QB','RB','WR','TE'].includes(pos))pool.push({id:String(r.player_id),name,position:pos,team:r.team||'FA',bye:'—',tier:null,tags:[],note:'',drafted:false});
+        const pos=String(r.position||'').toUpperCase(),team=teamText(r.team);
+        target[name]={id:String(r.player_id),rank:Number(r.sleeper_rank),posRank:Number(r.position_rank),team,pos,adp:Number(r.sleeper_adp),searchRank:Number(r.sleeper_adp),move:Number(r.rank_change)||0,updatedAt:r.captured_at?new Date(r.captured_at).getTime():Date.now(),central:true,format:activeFormat};
+        if(['QB','RB','WR','TE'].includes(pos))pool.push({id:String(r.player_id),name,position:pos,team,bye:'—',tier:null,tags:[],note:'',drafted:false});
       }
       try{sleeperPool=pool}catch(_){}
       try{localStorage.setItem('de_sleeper_pool',JSON.stringify(pool))}catch(_){}
     }finally{applying=false}
+    reconcileCurrentRankings(rows);
   }
 
   function renderFormatTabs(){
