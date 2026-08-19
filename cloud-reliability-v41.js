@@ -1,10 +1,10 @@
-// v41.1 — reliable cloud saves, optimistic revision checks, ranking backups, and sync preferences.
+// v41.2 — reliable cloud saves, valid cloud-list restore, optimistic revision checks, ranking backups, and sync preferences.
 (()=>{
   const DEVICE_KEY='de41_device_id';
   const CACHE_KEY='de41_cloud_cache';
   const deviceId=localStorage.getItem(DEVICE_KEY)||('dev_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10));
   localStorage.setItem(DEVICE_KEY,deviceId);
-  let saveBusy=false,pendingSave=false,retryCount=0,statusTimer=null;
+  let saveBusy=false,pendingSave=false,retryCount=0,statusTimer=null,cloudLoadPromise=null;
 
   function syncStatus(text,tone='normal'){
     let el=document.getElementById('deCloudStatus');
@@ -121,28 +121,34 @@
   window.persistNewList=persistNewList;
 
   loadCloudLists=async function(){
+    if(cloudLoadPromise)return cloudLoadPromise;
     if(!supabaseClient||!currentUser)return;
-    const prior=activeListId;
-    suspendCloudSave=true;
-    syncStatus('Loading cloud rankings…');
-    try{
-      const {data,error}=await supabaseClient.from('ranking_lists')
-        .select('id,user_id,name,data,created_at,updated_at,revision,last_device_id')
-        .eq('user_id',currentUser.id).order('updated_at',{ascending:false});
-      if(error)throw error;
-      rankingLists={};
-      (data||[]).forEach(row=>rankingLists[row.id]={
-        id:row.id,name:row.name,players:row.data?.players||[],tiers:row.data?.tiers||emptyTiers(),draftPrefs:row.data?.draftPrefs||null,excludedSleeperIds:Array.isArray(row.data?.excludedSleeperIds)?row.data.excludedSleeperIds:[],
-        createdAt:Date.parse(row.created_at)||Date.now(),updatedAt:Date.parse(row.updated_at)||Date.now(),
-        _cloudRevision:Number(row.revision)||1,_cloudUpdatedAt=Date.parse(row.updated_at)||Date.now(),_lastDeviceId:row.last_device_id||null
-      });
-      activeListId=(prior&&rankingLists[prior])?prior:(data?.[0]?.id||null);
-      loadActiveList();cacheLists();renderEverything();syncStatus('Cloud synced.','good');
-      if(!activeListId)openNewList();
-    }catch(e){
-      console.warn('Could not load cloud rankings',e);
-      syncStatus('Could not load cloud rankings. Your browser copy is still protected.','bad');
-    }finally{suspendCloudSave=false}
+    cloudLoadPromise=(async()=>{
+      const prior=activeListId;
+      suspendCloudSave=true;
+      syncStatus('Loading cloud rankings…');
+      try{
+        const {data,error}=await supabaseClient.from('ranking_lists')
+          .select('id,user_id,name,data,created_at,updated_at,revision,last_device_id')
+          .eq('user_id',currentUser.id).order('updated_at',{ascending:false});
+        if(error)throw error;
+        rankingLists={};
+        (data||[]).forEach(row=>rankingLists[row.id]={
+          id:row.id,name:row.name,players:row.data?.players||[],tiers:row.data?.tiers||emptyTiers(),draftPrefs:row.data?.draftPrefs||null,excludedSleeperIds:Array.isArray(row.data?.excludedSleeperIds)?row.data.excludedSleeperIds:[],
+          createdAt:Date.parse(row.created_at)||Date.now(),updatedAt:Date.parse(row.updated_at)||Date.now(),
+          _cloudRevision:Number(row.revision)||1,_cloudUpdatedAt:Date.parse(row.updated_at)||Date.now(),_lastDeviceId:row.last_device_id||null
+        });
+        activeListId=(prior&&rankingLists[prior])?prior:(data?.[0]?.id||null);
+        loadActiveList();cacheLists();renderEverything();syncStatus('Cloud synced.','good');
+        window.WorkhorseCloudRankingsReady=true;
+        try{window.dispatchEvent(new CustomEvent('workhorse:cloud-rankings-ready',{detail:{count:(data||[]).length,activeListId}}))}catch(_){}
+        if(!activeListId)openNewList();
+      }catch(e){
+        console.warn('Could not load cloud rankings',e);
+        syncStatus('Could not load cloud rankings. Your browser copy is still protected.','bad');
+      }finally{suspendCloudSave=false}
+    })();
+    try{return await cloudLoadPromise}finally{cloudLoadPromise=null}
   };
   window.loadCloudLists=loadCloudLists;
 
@@ -197,6 +203,13 @@
     const note=document.getElementById('accountSettingsNote');if(note)note.textContent='Signed-in ranking lists use conflict-safe cloud saves and automatic version backups across devices.';
   }
 
-  ensureBackupUI();refreshSettingsCopy();cacheLists();
-  setTimeout(()=>{ensureBackupUI();refreshSettingsCopy();if(currentUser)loadCloudLists()},1200);
+  function startCloudRestore(attempt=0){
+    ensureBackupUI();refreshSettingsCopy();
+    const signedIn=typeof currentUser!=='undefined'&&currentUser;
+    if(signedIn){loadCloudLists();return}
+    if(attempt<60)setTimeout(()=>startCloudRestore(attempt+1),100);
+  }
+
+  ensureBackupUI();refreshSettingsCopy();
+  startCloudRestore();
 })();
