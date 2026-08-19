@@ -1,4 +1,4 @@
-// v74.4 — top-of-drawer player news from RotoWire, ESPN, CBS, Sleeper signals, and Workhorse impact.
+// v74.5 — top-of-drawer player news; only real team/usage news can drive fantasy outlook.
 (()=>{
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
@@ -72,18 +72,20 @@
   }
 
   function isMaterial(n){
+    const cats=Array.isArray(n?.categories)?n.categories:[];
+    if(cats.includes('trending'))return false;
     const t=String(n?.fantasy_impact||'').toLowerCase();
-    return !!t&&!/does not clearly change|relevant context to monitor/.test(t);
+    return !!t&&!/does not clearly change|relevant context to monitor|market signal, not proof/.test(t);
   }
 
   function outlookText(p,news){
     const name=String(p?.name||'This player');
-    if(!news.length)return 'There is no recent player-specific news in the current feed, so there is no news-driven change to '+name+'\'s upcoming-season outlook right now.';
     const material=news.filter(isMaterial);
-    const lead=material[0]||news[0];
-    const second=news.find(n=>n!==lead&&String(n?.headline||'')!==String(lead?.headline||''));
-    let out='Recent news is centered on '+sentence(lead?.headline);
-    if(second)out+=' Another recent update is '+sentence(second.headline);
+    if(!material.length)return 'There is no recent team, health, role or usage news that materially changes '+name+'\'s upcoming-season outlook right now.';
+    const lead=material[0];
+    const second=material.find(n=>n!==lead&&String(n?.headline||'')!==String(lead?.headline||''));
+    let out='Recent relevant news is centered on '+sentence(lead?.headline);
+    if(second)out+=' Another relevant update is '+sentence(second.headline);
     if(lead?.fantasy_impact)out+=' '+String(lead.fantasy_impact).trim();
     return out.trim();
   }
@@ -99,7 +101,7 @@
         <div class="de74-loading"></div><div class="de74-loading" style="width:64%"></div>
       </div>
       <div class="de74-section" id="de74Outlook">
-        <div class="de74-head"><h3>Upcoming Season Fantasy Outlook</h3><span class="de74-fresh">news-based</span></div>
+        <div class="de74-head"><h3>Upcoming Season Fantasy Outlook</h3><span class="de74-fresh">team & usage news only</span></div>
         <div class="de74-loading"></div><div class="de74-loading" style="width:58%"></div>
       </div>`;
     const head=drawer.querySelector('.detailhead');
@@ -144,14 +146,15 @@
         body+=news.map(n=>{
           const cats=Array.isArray(n.categories)?n.categories:[];
           const indirect=cats.includes('indirect');
-          return '<div class="de74-news"><div class="de74-news-title">'+esc(n.headline)+'</div><div class="de74-news-meta"><span>'+esc(n.provider||'Source')+(n.published_at?' · '+esc(relativeTime(n.published_at)):'')+'</span>'+(indirect?'<span class="de74-badge">Indirect impact</span>':'')+'</div>'+(n.summary?'<div class="de74-news-summary">'+esc(n.summary)+'</div>':'')+(n.fantasy_impact?'<div class="de74-impact"><b>Fantasy impact:</b> '+esc(n.fantasy_impact)+'</div>':'')+(n.source_url?'<a class="de74-link" href="'+esc(n.source_url)+'" target="_blank" rel="noopener noreferrer">View source ↗</a>':'')+'</div>';
+          const trending=cats.includes('trending');
+          return '<div class="de74-news"><div class="de74-news-title">'+esc(n.headline)+'</div><div class="de74-news-meta"><span>'+esc(n.provider||'Source')+(n.published_at?' · '+esc(relativeTime(n.published_at)):'')+'</span>'+(indirect?'<span class="de74-badge">Indirect impact</span>':'')+(trending?'<span class="de74-badge">Market signal</span>':'')+'</div>'+(n.summary?'<div class="de74-news-summary">'+esc(n.summary)+'</div>':'')+(n.fantasy_impact?'<div class="de74-impact"><b>Fantasy impact:</b> '+esc(n.fantasy_impact)+'</div>':'')+(n.source_url?'<a class="de74-link" href="'+esc(n.source_url)+'" target="_blank" rel="noopener noreferrer">View source ↗</a>':'')+'</div>';
         }).join('');
       }else body+='<div class="de74-empty">No recent player-specific article is in the current feed.</div>';
       box.innerHTML='<div class="de74-head"><h3>Recent News</h3><span class="de74-fresh">refreshes every 15m</span></div>'+body;
     }
 
     const out=$('de74Outlook');if(out){
-      out.innerHTML='<div class="de74-head"><h3>Upcoming Season Fantasy Outlook</h3><span class="de74-fresh">news-based</span></div><div class="de74-outlook">'+esc(outlookText(p,news))+'</div>';
+      out.innerHTML='<div class="de74-head"><h3>Upcoming Season Fantasy Outlook</h3><span class="de74-fresh">team & usage news only</span></div><div class="de74-outlook">'+esc(outlookText(p,news))+'</div>';
     }
   }
 
