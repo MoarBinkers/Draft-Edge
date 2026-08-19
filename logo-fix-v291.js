@@ -111,7 +111,7 @@
   }
 
   async function loadData(parts){
-    const responses=await Promise.all(parts.map(p=>fetch(p,{cache:'no-store'})));
+    const responses=await Promise.all(parts.map(p=>fetch(p,{cache:'force-cache'})));
     if(responses.some(r=>!r.ok))throw new Error('Workhorse brand asset unavailable');
     const chunks=await Promise.all(responses.map(r=>r.text()));
     return 'data:image/webp;base64,'+chunks.join('').replace(/\s+/g,'');
