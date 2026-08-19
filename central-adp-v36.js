@@ -1,4 +1,4 @@
-// v36.3 — live Sleeper ADP + independent player identity directory + non-destructive ranking reconciliation.
+// v36.4 — live Sleeper ADP + independent player identity directory + safe identity/dedup reconciliation.
 (()=>{
   const HISTORY_KEY='de29_adp_history';
   const FORMAT_KEY='de36_adp_format';
@@ -57,6 +57,17 @@
     if(String(aPos||'').toUpperCase()!==String(bPos||'').toUpperCase())return false;
     return exactNameKey(aName,aPos)===exactNameKey(bName,bPos)||identityNameKey(aName,aPos)===identityNameKey(bName,bPos);
   }
+  function mergeDuplicatePlayer(keeper,duplicate){
+    const tags=[...(Array.isArray(keeper.tags)?keeper.tags:[]),...(Array.isArray(duplicate.tags)?duplicate.tags:[])];
+    keeper.tags=[...new Set(tags)];
+    if(!String(keeper.note||'').trim()&&String(duplicate.note||'').trim())keeper.note=duplicate.note;
+    if((keeper.tier==null||keeper.tier==='')&&duplicate.tier!=null&&duplicate.tier!=='')keeper.tier=duplicate.tier;
+    if((!keeper.bye||keeper.bye==='—')&&duplicate.bye&&duplicate.bye!=='—')keeper.bye=duplicate.bye;
+    if(!keeper.drafted&&duplicate.drafted){
+      keeper.drafted=true;keeper.draftedAt=duplicate.draftedAt||keeper.draftedAt||Date.now();
+      keeper.draftedSource=duplicate.draftedSource||null;keeper.draftedDraftId=duplicate.draftedDraftId||null;keeper.draftedPickNo=duplicate.draftedPickNo||null;
+    }
+  }
 
   function activeList(){try{return typeof currentList==='function'?currentList():rankingLists?.[activeListId]||null}catch(_){return null}}
   function excludedIds(list){
@@ -69,7 +80,7 @@
     const all=[];let from=0;
     while(true){
       const {data,error}=await client.from('sleeper_player_status')
-        .select('player_id,full_name,position,team,status,updated_at').range(from,from+999);
+        .select('player_id,full_name,position,team,status,updated_at').order('player_id',{ascending:true}).range(from,from+999);
       if(error)throw error;
       const batch=Array.isArray(data)?data:[];all.push(...batch);
       if(batch.length<1000)break;from+=1000;
@@ -105,17 +116,34 @@
       };
 
       let changed=false;
-      const existingIds=new Set(),existingNames=new Set(),existingAliases=new Set();
       for(const p of players){
         const identity=findIdentity(p)||findAdp(p);
-        if(identity){
-          const currentId=String(identity.player_id||'');
-          if(currentId&&String(p.sleeperId||'')!==currentId){p.sleeperId=currentId;changed=true}
-          const liveTeam=String(identity.team||'').trim(),currentTeam=String(p.team||'').trim();
-          if(liveTeam&&liveTeam.toUpperCase()!=='FA'&&currentTeam!==liveTeam){p.team=liveTeam;changed=true}
-          else if((!currentTeam||currentTeam.toUpperCase()==='FA')&&!liveTeam){p.team='—';changed=true}
-        }
-        const finalId=String(p?.sleeperId||'');if(finalId)existingIds.add(finalId);
+        if(!identity)continue;
+        const currentId=String(identity.player_id||'');
+        if(currentId&&String(p.sleeperId||'')!==currentId){p.sleeperId=currentId;changed=true}
+        const liveTeam=String(identity.team||'').trim(),currentTeam=String(p.team||'').trim();
+        if(liveTeam&&liveTeam.toUpperCase()!=='FA'&&currentTeam!==liveTeam){p.team=liveTeam;changed=true}
+        else if((!currentTeam||currentTeam.toUpperCase()==='FA')&&!liveTeam){p.team='—';changed=true}
+      }
+
+      // If the old matcher auto-added an alias of a player already on the board, keep the user's higher-ranked row.
+      const keepById=new Map(),remove=new Set();
+      for(const p of players.slice().sort((a,b)=>(Number(a.overall)||99999)-(Number(b.overall)||99999))){
+        const id=String(p?.sleeperId||'');if(!id)continue;
+        const keeper=keepById.get(id);
+        if(!keeper){keepById.set(id,p);continue}
+        mergeDuplicatePlayer(keeper,p);remove.add(p);changed=true;
+      }
+      if(remove.size){
+        players=players.filter(p=>!remove.has(p));
+        const ordered=players.slice().sort((a,b)=>(Number(a.overall)||99999)-(Number(b.overall)||99999));
+        const counts={};
+        ordered.forEach((p,i)=>{p.overall=i+1;const pos=String(p.position||'');counts[pos]=(counts[pos]||0)+1;p.posRank=counts[pos]});
+      }
+
+      const existingIds=new Set(),existingNames=new Set(),existingAliases=new Set();
+      for(const p of players){
+        const id=String(p?.sleeperId||'');if(id)existingIds.add(id);
         existingNames.add(exactNameKey(p?.name,p?.position));
         existingAliases.add(identityNameKey(p?.name,p?.position));
       }
