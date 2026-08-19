@@ -1,4 +1,4 @@
-// v76 — one owner for Live Draft onboarding and the current Draft Legend.
+// v76.1 — one owner for Live Draft onboarding and the current Draft Legend.
 (()=>{
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
@@ -52,7 +52,7 @@
     box.innerHTML=`
       <div class="wh76-top">
         <div><h3>How Live Draft Works</h3><div class="wh76-desc">Connect your Sleeper draft and Workhorse follows the room for you. Workhorse does <b>not</b> make picks on Sleeper — it keeps your board updated, removes drafted players, tracks your turns, and compares the live board with your rankings and Sleeper ADP.</div></div>
-        <span class="wh76-badge">Sleeper connected</span>
+        <span class="wh76-badge">Sleeper Live Draft</span>
       </div>
       <div class="wh76-steps">
         <div class="wh76-step"><div class="wh76-num">1</div><div class="wh76-title">Copy your Sleeper draft</div><div class="wh76-copy">Open the draft in Sleeper. Copy the draft link. A Draft ID or League ID also works.</div></div>
