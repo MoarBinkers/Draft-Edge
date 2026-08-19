@@ -1,5 +1,7 @@
-// v78.1 — use Sleeper's live player rank when format-specific PPR ADP is unavailable.
+// v78.2 — fetch fallback Sleeper ranks only for players that actually lack format-specific ADP.
 (()=>{
+  const FALLBACK_LIMIT=500;
+  const BATCH=100;
   let installed=false,client=null,loading=null;
   const fallbackRanks=new Map();
 
@@ -15,7 +17,19 @@
   }
 
   function playerIds(){
-    try{return [...new Set((Array.isArray(players)?players:[]).map(p=>String(p?.sleeperId||'')).filter(Boolean))]}catch(_){return []}
+    const out=[],seen=new Set();
+    try{
+      for(const p of Array.isArray(players)?players:[]){
+        let info=null;
+        try{info=typeof marketFor==='function'?marketFor(p):null}catch(_){}
+        if(info?.rank!=null)continue;
+        const id=String(p?.sleeperId||info?.id||'');
+        if(!id||seen.has(id))continue;
+        seen.add(id);out.push(id);
+        if(out.length>=FALLBACK_LIMIT)break;
+      }
+    }catch(_){}
+    return out;
   }
 
   async function loadNeededRanks(){
@@ -25,16 +39,17 @@
     const db=getClient();if(!db)return;
     loading=(async()=>{
       try{
-        for(let i=0;i<ids.length;i+=150){
-          const batch=ids.slice(i,i+150);
-          const {data,error}=await db.from('sleeper_player_status').select('player_id,search_rank').in('player_id',batch);
-          if(error)throw error;
-          for(const row of data||[]){
+        const batches=[];
+        for(let i=0;i<ids.length;i+=BATCH)batches.push(ids.slice(i,i+BATCH));
+        const results=await Promise.all(batches.map(batch=>db.from('sleeper_player_status').select('player_id,search_rank').in('player_id',batch)));
+        for(const result of results){
+          if(result?.error)throw result.error;
+          for(const row of result?.data||[]){
             const id=String(row.player_id||''),rank=Number(row.search_rank);
             fallbackRanks.set(id,Number.isFinite(rank)&&rank>0?rank:null);
           }
-          for(const id of batch)if(!fallbackRanks.has(id))fallbackRanks.set(id,null);
         }
+        for(const id of ids)if(!fallbackRanks.has(id))fallbackRanks.set(id,null);
       }catch(e){console.warn('Workhorse Sleeper fallback ranks could not load',e)}
       finally{loading=null}
     })();
@@ -120,7 +135,9 @@
     try{if(typeof renderRankings==='function')renderRankings()}catch(e){console.warn('Workhorse Sleeper fallback render skipped',e)}
   }
 
-  refresh();
-  [400,1000,2200,5000].forEach(ms=>setTimeout(refresh,ms));
+  if(window.WorkhorseCentralAdpReady)setTimeout(refresh,100);
+  else setTimeout(refresh,800);
+  window.addEventListener('workhorse:central-adp-ready',()=>setTimeout(refresh,0));
+  setTimeout(refresh,2500);
   window.WorkhorseUnrankedLabels={refresh};
 })();
