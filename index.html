@@ -15,6 +15,22 @@
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Workhorse — Fantasy Analytics">
 <meta name="twitter:description" content="Fantasy football analytics, rankings, player news, market movement, and live draft tools.">
+<link id="workhorse-favicon" rel="icon" type="image/webp">
+<script>
+(()=>{
+  const parts=Array.from({length:8},(_,i)=>'./assets/workhorse-icon-'+i+'.txt?v=1');
+  window.__WORKHORSE_ICON_PROMISE=Promise.all(parts.map(async p=>{
+    const r=await fetch(p,{cache:'force-cache'});
+    if(!r.ok)throw new Error('favicon');
+    return r.text();
+  })).then(chunks=>{
+    const href='data:image/webp;base64,'+chunks.join('').replace(/\s+/g,'');
+    const icon=document.getElementById('workhorse-favicon');
+    if(icon)icon.href=href;
+    return href;
+  }).catch(()=>null);
+})();
+</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Workhorse Fantasy Analytics","url":"https://moarbinkers.github.io/Workhorse-Fantasy/","applicationCategory":"SportsApplication","operatingSystem":"Web","description":"Fantasy football analytics for rankings, player news, market movement, and live drafts."}</script>
 <style>
 html,body{margin:0;min-height:100%;background:#0b1016;color:#eef3f7;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}.loading{min-height:100vh;display:grid;place-items:center;padding:24px}.box{text-align:center;max-width:720px}.mark{font-size:30px;font-weight:1000;letter-spacing:-.04em}.sub{margin-top:8px;color:#8d9baa;font-size:13px;line-height:1.55}.err{margin-top:14px;padding:12px 14px;border:1px solid #4a3340;border-radius:10px;background:#1c141a;color:#f3b6c2;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}
