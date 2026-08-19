@@ -1,0 +1,53 @@
+name: Validate Workhorse
+
+on:
+  push:
+    branches: ["staging"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check JavaScript syntax
+        run: |
+          find . -maxdepth 1 -type f -name '*.js' -print0 | while IFS= read -r -d '' file; do
+            echo "Checking $file"
+            node --check "$file"
+          done
+
+      - name: Check local script references
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+          missing = []
+
+          index = (root / 'index.html').read_text(encoding='utf-8')
+          for path in re.findall(r'src=\\?"\.\/([^?"\\]+\.js)', index):
+              if not (root / path).is_file():
+                  missing.append(('index.html', path))
+
+          loader_path = root / 'decision-loader-v61.js'
+          if loader_path.is_file():
+              loader = loader_path.read_text(encoding='utf-8')
+              for path in re.findall(r"['\"]\.\/([^?'\"]+\.js)", loader):
+                  if not (root / path).is_file():
+                      missing.append((loader_path.name, path))
+
+          if missing:
+              for owner, path in missing:
+                  print(f'MISSING: {owner} -> {path}')
+              raise SystemExit(1)
+
+          print('All referenced local scripts exist.')
+          PY
