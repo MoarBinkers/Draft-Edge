@@ -1,9 +1,6 @@
-// v34 — richer player rank details, complete saved ADP-change history, and easier Sleeper live-draft connection.
+// v34.1 — player rank details, compact Sleeper history, and current ADP refresh.
 (()=>{
   const HISTORY_KEY='de29_adp_history';
-  const DRAFT_INPUT_KEY='de34_draft_input';
-  let resolvedDraftId='';
-  let resolvedDraftMeta=null;
 
   const htmlEsc=v=>typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const clean=v=>typeof cleanPlayerName==='function'?cleanPlayerName(v):String(v||'').trim();
@@ -60,7 +57,14 @@
     const first=ranks[0],current=ranks[ranks.length-1];
     return {list,first,current,best:Math.min(...ranks),worst:Math.max(...ranks),total:first-current};
   }
-  function fullHistoryHtml(p){
+  function formatUpdatedAt(ms){
+    const n=Number(ms);if(!Number.isFinite(n)||n<=0)return '—';
+    const d=new Date(n);if(Number.isNaN(d.getTime()))return '—';
+    const now=new Date();
+    const sameDay=d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate();
+    return sameDay?d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):d.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  }
+  function historyHtml(p){
     const h=historySummary(p),all=h.list;
     if(!all.length)return '<div class="small" style="padding:14px 0">No Sleeper ADP history has been recorded for this player yet.</div>';
     const ranks=all.map(x=>Number(x.rank));
@@ -72,21 +76,15 @@
     const dots=pts.map(c=>'<circle cx="'+c.x.toFixed(1)+'" cy="'+c.y.toFixed(1)+'" r="4" fill="'+color+'"><title>#'+c.rank+'</title></circle>').join('');
     const graph='<div style="overflow-x:auto;background:#0d141b;border:1px solid #2c3c4b;border-radius:14px;padding:12px;margin-top:8px"><svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;max-width:none"><line x1="'+L+'" y1="'+(T+ih)+'" x2="'+(W-R)+'" y2="'+(T+ih)+'" stroke="#2d3c49"/><line x1="'+L+'" y1="'+T+'" x2="'+L+'" y2="'+(T+ih)+'" stroke="#2d3c49"/><text x="5" y="'+(T+5)+'" fill="#8fa0af" font-size="11">#'+min+'</text><text x="5" y="'+(T+ih)+'" fill="#8fa0af" font-size="11">#'+max+'</text>'+(all.length>1?'<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>':'')+dots+'</svg></div>';
     const summary='<div class="stats" style="grid-template-columns:repeat(5,minmax(0,1fr));margin-top:10px"><div class="stat"><b>#'+h.first+'</b><span>First Saved</span></div><div class="stat"><b>#'+h.current+'</b><span>Current</span></div><div class="stat"><b>#'+h.best+'</b><span>Best Rank</span></div><div class="stat"><b>#'+h.worst+'</b><span>Worst Rank</span></div><div class="stat"><b class="move '+moveClass(h.total)+'">'+signed(h.total)+'</b><span>Total Move</span></div></div>';
-    const rows=all.slice().reverse().map((x,reverseIndex)=>{
-      const original=all.length-1-reverseIndex;
-      const prev=original>0?Number(all[original-1].rank):null;
-      const change=prev==null?null:prev-Number(x.rank);
-      const when=x.label==='Current'?'Current':x.t?new Date(Number(x.t)).toLocaleString():(x.label||'Previous saved rank');
-      return '<div class="historyrow"><span>'+htmlEsc(when)+'</span><span style="display:flex;gap:14px;align-items:center"><b>#'+Number(x.rank)+'</b><b class="move '+moveClass(change)+'">'+(change==null?'—':signed(change))+'</b></span></div>';
-    }).join('');
-    return summary+graph+'<div class="small" style="margin:10px 0 5px">All '+all.length+' saved Sleeper rank change'+(all.length===1?'':'s')+'</div><div>'+rows+'</div>';
+    const stamp='<div class="small" style="margin-top:10px;color:#8fa0af">Last updated: '+htmlEsc(formatUpdatedAt(marketFor(p)?.updatedAt))+'</div>';
+    return summary+graph+stamp;
   }
 
   function ownedDetailHtml(p,i){
     const m=marketFor(p),edge=m?.rank!=null?Number(m.rank)-Number(p.overall):null,mv=Number(m?.move)||0;
     return '<div class="detailhead"><img class="detailimg" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div><h2 style="margin:0">'+htmlEsc(clean(p.name))+'</h2><div class="small">'+htmlEsc(p.team)+' · '+htmlEsc(p.position)+' · Bye '+htmlEsc(p.bye)+'</div></div></div>'+
       '<div class="section"><h3>Rank Snapshot</h3><div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><div class="stat"><b>#'+p.overall+'</b><span>My Overall</span></div><div class="stat"><b>'+p.position+'#'+p.posRank+'</b><span>My Pos Rank</span></div><div class="stat"><b>'+(m?.rank!=null?'#'+m.rank:'—')+'</b><span>Sleeper Overall</span></div><div class="stat"><b>'+(m?.posRank?(m.pos||p.position)+'#'+m.posRank:'—')+'</b><span>Sleeper Pos Rank</span></div><div class="stat"><b class="edge '+(edge>0?'good':edge<0?'bad':'')+'">'+(edge==null?'—':signed(edge))+'</b><span>My Edge</span></div><div class="stat"><b class="move '+moveClass(mv)+'">'+signed(mv)+'</b><span>Latest ADP Move</span></div></div></div>'+
-      '<div class="section"><h3>Full Sleeper ADP History</h3>'+fullHistoryHtml(p)+'</div>'+
+      '<div class="section"><h3>Sleeper ADP History</h3>'+historyHtml(p)+'</div>'+
       '<div class="section"><h3>Tags & Note</h3><div class="tags">'+tagsHtml(p)+' <button class="btn" onclick="openEdit('+i+')" style="padding:6px 10px">＋ Add Tags & Note</button></div></div>'+
       '<div class="section"><h3>Notes</h3><div style="font-size:12px;color:#b8c4ce;white-space:pre-wrap;line-height:1.55">'+htmlEsc(p.note||'No notes yet.')+'</div></div>'+
       '<div class="section" style="padding-top:12px;border-top:1px solid #293744"><button class="btn" onclick="removePlayer('+i+')" style="border-color:#6b3440;color:#fb9aaa;background:#25161b">Remove Player From List</button></div>';
@@ -99,7 +97,7 @@
   window.openMarketDetail=function(name){
     const p=sleeperPool.find(x=>normalized(x.name)===normalized(name))||{name},owned=findPersonalByName(name),m=marketFor(p),mv=Number(m?.move)||0;
     if(owned){openDetail(players.indexOf(owned));return}
-    document.getElementById('drawerContent').innerHTML='<div class="detailhead"><img class="detailimg" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div><h2 style="margin:0">'+htmlEsc(clean(p.name))+'</h2><div class="small">'+htmlEsc(p.team||'FA')+' · '+htmlEsc(p.position||m?.pos||'')+'</div></div></div><div class="section"><h3>Rank Snapshot</h3><div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><div class="stat"><b>'+(m?.rank!=null?'#'+m.rank:'—')+'</b><span>Sleeper Overall</span></div><div class="stat"><b>'+(m?.posRank?(p.position||m.pos)+'#'+m.posRank:'—')+'</b><span>Sleeper Pos Rank</span></div><div class="stat"><b class="move '+moveClass(mv)+'">'+signed(mv)+'</b><span>Latest ADP Move</span></div></div></div><div class="section"><h3>Full Sleeper ADP History</h3>'+fullHistoryHtml(p)+'</div><div class="section"><button class="btn primary" data-detail-add="'+encodeURIComponent(p.name)+'">＋ Add To My Rankings</button></div>';
+    document.getElementById('drawerContent').innerHTML='<div class="detailhead"><img class="detailimg" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div><h2 style="margin:0">'+htmlEsc(clean(p.name))+'</h2><div class="small">'+htmlEsc(p.team||'FA')+' · '+htmlEsc(p.position||m?.pos||'')+'</div></div></div><div class="section"><h3>Rank Snapshot</h3><div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><div class="stat"><b>'+(m?.rank!=null?'#'+m.rank:'—')+'</b><span>Sleeper Overall</span></div><div class="stat"><b>'+(m?.posRank?(p.position||m.pos)+'#'+m.posRank:'—')+'</b><span>Sleeper Pos Rank</span></div><div class="stat"><b class="move '+moveClass(mv)+'">'+signed(mv)+'</b><span>Latest ADP Move</span></div></div></div><div class="section"><h3>Sleeper ADP History</h3>'+historyHtml(p)+'</div><div class="section"><button class="btn primary" data-detail-add="'+encodeURIComponent(p.name)+'">＋ Add To My Rankings</button></div>';
     document.getElementById('drawer').classList.add('open');
     const b=document.querySelector('[data-detail-add]');if(b)b.onclick=()=>{addPlayerFromPoolName(decodeURIComponent(b.dataset.detailAdd));document.getElementById('drawer').classList.remove('open')};
   };
