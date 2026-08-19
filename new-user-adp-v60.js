@@ -1,4 +1,4 @@
-// v60 — clean onboarding: new ranking lists start as a bare Sleeper ADP snapshot.
+// v60.1 — clean onboarding from the current Sleeper ADP snapshot with sync metadata.
 (()=>{
   const MIGRATION_KEY='de60_clean_adp_onboarding';
   let busy=false;
@@ -28,7 +28,7 @@
         overall:i+1,
         name:p.name,
         position:p.position||p.pos||'NA',
-        team:p.team||'FA',
+        team:p.team||'—',
         bye:p.bye??'—',
         posRank:pc[p.position],
         tier:null,
@@ -38,7 +38,8 @@
         draftedAt:null,
         draftedSource:null,
         draftedDraftId:null,
-        draftedPickNo:null
+        draftedPickNo:null,
+        sleeperId:p.id||p.sleeperId||null
       };
     });
   }
@@ -73,7 +74,7 @@
   function cleanListData(name='My Rankings'){
     const ps=freshPlayers();
     if(ps.length<100)return null;
-    return {id:localId(),name,players:ps,tiers:emptyTiers(),draftPrefs:null,createdAt:Date.now(),updatedAt:Date.now()};
+    return {id:localId(),name,players:ps,tiers:emptyTiers(),draftPrefs:null,excludedSleeperIds:[],createdAt:Date.now(),updatedAt:Date.now()};
   }
 
   async function createCloudStarter(){
@@ -87,7 +88,7 @@
       try{renderEverything()}catch(_){}
       return true;
     }catch(e){
-      console.warn('Draft Edge starter rankings could not be created',e);
+      console.warn('Workhorse starter rankings could not be created',e);
       return false;
     }finally{busy=false}
   }
@@ -102,6 +103,7 @@
     list.players=ps;
     list.tiers=emptyTiers();
     list.draftPrefs=null;
+    list.excludedSleeperIds=[];
     list.updatedAt=Date.now();
     rankingLists[id]=list;
     activeListId=id;
@@ -150,6 +152,7 @@
     }else{
       migrateUntouchedLocalStarter();
     }
+    try{window.WorkhorseReconcileSleeperRankings?.()}catch(_){}
   }
 
   [100,500,1200,2500,5000,8000].forEach(ms=>setTimeout(reconcile,ms));
