@@ -1,7 +1,8 @@
-// v39 — tiers are visual only; ranking order is canonical and synced across ALL/position views.
+// v39.1 — tiers are visual only; ranking order is canonical and synced across ALL/position views.
 (()=>{
   let dragSnap=null;
   let fixing=false;
+  let dragGhost=null;
 
   const pKey=p=>{
     if(!p)return '';
@@ -12,6 +13,25 @@
   };
   const tierVal=v=>v==null||v===''||Number(v)===0?null:Number(v);
   const num=(v,fallback)=>Number.isFinite(Number(v))?Number(v):fallback;
+
+  function ensureDragUx(){
+    if(!document.getElementById('workhorse-rank-drag-ux')){
+      const s=document.createElement('style');
+      s.id='workhorse-rank-drag-ux';
+      s.textContent=`
+        #rankList .player[data-index]{-webkit-user-select:none;user-select:none}
+        #rankList .player[data-index] img{-webkit-user-drag:none!important;user-drag:none!important}
+      `;
+      document.head.appendChild(s);
+    }
+    if(!dragGhost&&document.body){
+      dragGhost=document.createElement('div');
+      dragGhost.setAttribute('aria-hidden','true');
+      dragGhost.style.cssText='position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:.01;pointer-events:none;';
+      document.body.appendChild(dragGhost);
+    }
+  }
+  ensureDragUx();
 
   function overallOrder(){
     return players.slice().sort((a,b)=>num(a.overall,999999)-num(b.overall,999999));
@@ -28,7 +48,6 @@
     return changed;
   }
 
-  // Critical rule: tier placement never participates in ranking math.
   orderedPos=function(pos){
     return overallOrder().filter(p=>String(p.position||'')===String(pos));
   };
@@ -61,9 +80,40 @@
     };
   }
 
+  // Stop player headshots from becoming a separate browser drag source.
+  document.addEventListener('pointerdown',e=>{
+    const row=e.target.closest?.('#rankList .player[data-index]');
+    if(!row)return;
+    row.querySelectorAll('img').forEach(img=>{img.draggable=false});
+  },true);
+
   document.addEventListener('dragstart',e=>{
     const row=e.target.closest?.('#rankList .player[data-index]');
-    if(row)captureDrag(row);
+    if(!row)return;
+    ensureDragUx();
+    row.querySelectorAll('img').forEach(img=>{img.draggable=false});
+    captureDrag(row);
+    if(e.dataTransfer){
+      try{e.dataTransfer.effectAllowed='move'}catch(_){}
+      try{e.dataTransfer.setData('text/plain',String(row.dataset.index||''))}catch(_){}
+      try{if(dragGhost)e.dataTransfer.setDragImage(dragGhost,0,0)}catch(_){}
+    }
+  },true);
+
+  // If a browser cancels a drag, never leave an old dragState or ghost styling behind.
+  document.addEventListener('dragend',e=>{
+    const row=e.target.closest?.('#rankList .player[data-index]');
+    if(!row)return;
+    setTimeout(()=>{
+      document.querySelectorAll('#rankList .player.dragging').forEach(el=>el.classList.remove('dragging'));
+      try{
+        if(typeof dragState!=='undefined'&&dragState?.el){
+          dragState={el:null,index:null,startPos:null,startTier:null};
+          dragSnap=null;
+          try{renderRankings()}catch(_){}
+        }
+      }catch(_){}
+    },0);
   },true);
 
   function tierFromDom(el){
@@ -91,8 +141,6 @@
   }
 
   function applySameTierPositionReorder(s,tier){
-    // Only player order inside the SAME visual tier can change ranking order.
-    // Moving to another tier is organization only and is handled separately.
     const members=s.posOrder.filter(k=>tierVal(s.records.get(k)?.tier)===tierVal(tier));
     if(members.length<2){restoreCanonicalRanks(s);return false}
     const memberSet=new Set(members);
@@ -118,7 +166,6 @@
     if(!dragState?.el||dragState.index==null)return;
 
     if(rankPos==='ALL'){
-      // ALL is the master ordering view. Let the native reorder happen, then derive position ranks from it.
       if(originalCommit)originalCommit();
       if(syncPosRanksFromOverall())try{save()}catch(_){}
       try{renderRankings()}catch(_){}
@@ -130,7 +177,6 @@
     const draggedEl=dragState.el;
     const dragged=players[dragState.index];
     if(!s||!dragged){
-      // Fail safe: never let tier DOM order silently resequence ranks.
       const newTier=tierFromDom(draggedEl);
       if(dragged)dragged.tier=newTier;
       syncPosRanksFromOverall();
@@ -145,16 +191,10 @@
     try{
       const newTier=tierFromDom(draggedEl);
       const changedTier=tierVal(newTier)!==tierVal(s.oldTier);
-
-      // First restore the ranking numbers that existed before this drag.
       restoreCanonicalRanks(s);
       dragged.tier=newTier;
 
-      if(!changedTier){
-        // Same tier: a deliberate up/down player drag changes actual rank and syncs back to ALL.
-        applySameTierPositionReorder(s,newTier);
-      }
-      // Different tier: NO rank change. Tier is only visual organization.
+      if(!changedTier)applySameTierPositionReorder(s,newTier);
 
       syncPosRanksFromOverall();
       try{save()}catch(_){}
@@ -167,7 +207,6 @@
   };
   window.commitVisualOrder=commitVisualOrder;
 
-  // Repair any position ranks previously corrupted by tier-based resequencing.
   setTimeout(()=>{
     if(fixing||!Array.isArray(players))return;
     if(syncPosRanksFromOverall()){
