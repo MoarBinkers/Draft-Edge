@@ -1,7 +1,7 @@
-// v60.1 — clean onboarding from the current Sleeper ADP snapshot with sync metadata.
+// v60.3 — clean onboarding from the current Sleeper ADP snapshot with explicit list creation confirmation.
 (()=>{
   const MIGRATION_KEY='de60_clean_adp_onboarding';
-  let busy=false;
+  let busy=false,createConfirmBusy=false;
 
   const hasCentralAdp=()=>{
     try{
@@ -134,6 +134,56 @@
     try{window.createNamedList=createNamedList}catch(_){}
   }
 
+  async function confirmNewList(){
+    const input=document.getElementById('newListName');
+    const name=input?.value?.trim();
+    if(!name){input?.focus();return}
+    if(createConfirmBusy)return;
+    createConfirmBusy=true;
+    const btn=document.getElementById('workhorseCreateListConfirm');
+    if(btn){btn.disabled=true;btn.textContent='Creating…'}
+    try{
+      if(typeof createNamedList!=='function')throw new Error('List creation is not ready yet.');
+      await createNamedList('adp');
+    }catch(e){
+      alert('Could not create list: '+(e?.message||e));
+    }finally{
+      createConfirmBusy=false;
+      if(btn&&btn.isConnected){btn.disabled=false;btn.textContent='Create List'}
+    }
+  }
+
+  function ensureCreateConfirm(){
+    const modal=document.getElementById('newListModal');
+    const input=document.getElementById('newListName');
+    if(!modal||!input)return false;
+
+    let btn=document.getElementById('workhorseCreateListConfirm');
+    if(!btn){
+      btn=document.createElement('button');
+      btn.id='workhorseCreateListConfirm';
+      btn.type='button';
+      btn.textContent='Create List';
+      const sample=[...modal.querySelectorAll('button')].find(x=>x.id!=='workhorseCreateListConfirm');
+      if(sample?.className)btn.className=sample.className;
+      if(!String(btn.className||'').trim())btn.className='btn primary';
+      btn.style.marginTop='12px';
+      btn.style.width='100%';
+      btn.addEventListener('click',confirmNewList);
+      input.insertAdjacentElement('afterend',btn);
+    }
+
+    if(!input.dataset.workhorseCreateConfirm){
+      input.dataset.workhorseCreateConfirm='1';
+      input.addEventListener('keydown',e=>{
+        if(e.key!=='Enter'||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey)return;
+        e.preventDefault();
+        confirmNewList();
+      });
+    }
+    return true;
+  }
+
   // Cloud reliability may have wrapped loadCloudLists before this patch. Extend its final behavior.
   const baseLoadCloudLists=typeof loadCloudLists==='function'?loadCloudLists:null;
   if(baseLoadCloudLists){
@@ -155,5 +205,10 @@
     try{window.WorkhorseReconcileSleeperRankings?.()}catch(_){}
   }
 
+  [80,250,700,1500,3000].forEach(ms=>setTimeout(ensureCreateConfirm,ms));
+  document.addEventListener('click',e=>{
+    const modal=document.getElementById('newListModal');
+    if(modal&&!modal.classList.contains('open'))setTimeout(ensureCreateConfirm,0);
+  });
   [100,500,1200,2500,5000,8000].forEach(ms=>setTimeout(reconcile,ms));
 })();
