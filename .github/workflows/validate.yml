@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: validate-workhorse-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -16,38 +20,70 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check JavaScript syntax
-        run: |
-          find . -maxdepth 1 -type f -name '*.js' -print0 | while IFS= read -r -d '' file; do
-            echo "Checking $file"
-            node --check "$file"
-          done
-
-      - name: Check local script references
+      - name: Find current Workhorse scripts
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
 
           root = Path('.')
-          missing = []
+          ref_re = re.compile(r'\.\/([A-Za-z0-9._-]+\.js)(?:\?[^\s\"\'\\<>]*)?')
+          found = set()
+          queue = []
 
-          index = (root / 'index.html').read_text(encoding='utf-8')
-          for path in re.findall(r'src=\\?"\.\/([^?"\\]+\.js)', index):
-              if not (root / path).is_file():
-                  missing.append(('index.html', path))
+          def add_refs(text):
+              for path in ref_re.findall(text):
+                  if path not in found:
+                      found.add(path)
+                      queue.append(path)
 
-          loader_path = root / 'decision-loader-v61.js'
-          if loader_path.is_file():
-              loader = loader_path.read_text(encoding='utf-8')
-              for path in re.findall(r"['\"]\.\/([^?'\"]+\.js)", loader):
-                  if not (root / path).is_file():
-                      missing.append((loader_path.name, path))
+          index = root / 'index.html'
+          if not index.is_file():
+              raise SystemExit('MISSING: index.html')
+          add_refs(index.read_text(encoding='utf-8'))
 
-          if missing:
-              for owner, path in missing:
-                  print(f'MISSING: {owner} -> {path}')
-              raise SystemExit(1)
+          checked = set()
+          while queue:
+              path = queue.pop(0)
+              if path in checked:
+                  continue
+              checked.add(path)
+              file = root / path
+              if not file.is_file():
+                  raise SystemExit(f'MISSING loaded script: {path}')
+              add_refs(file.read_text(encoding='utf-8'))
 
-          print('All referenced local scripts exist.')
+          if not checked:
+              raise SystemExit('No Workhorse JavaScript files were discovered from index.html')
+
+          Path('/tmp/workhorse-loaded-js.txt').write_text(
+              ''.join(f'{p}\n' for p in sorted(checked)),
+              encoding='utf-8'
+          )
+          print(f'Found {len(checked)} loaded JavaScript files.')
+          for path in sorted(checked):
+              print(path)
+          PY
+
+      - name: Check loaded JavaScript syntax
+        run: |
+          while IFS= read -r file; do
+            echo "Checking $file"
+            node --check "$file"
+          done < /tmp/workhorse-loaded-js.txt
+
+      - name: Note unused legacy scripts
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          loaded = set(Path('/tmp/workhorse-loaded-js.txt').read_text(encoding='utf-8').splitlines())
+          all_js = {p.name for p in Path('.').glob('*.js')}
+          unused = sorted(all_js - loaded)
+          print(f'{len(unused)} root JavaScript files are not part of the current load chain.')
+          if unused:
+              print('Unused/legacy files are not treated as a production failure:')
+              for path in unused:
+                  print(path)
           PY
