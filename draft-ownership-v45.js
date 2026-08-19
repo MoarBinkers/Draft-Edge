@@ -1,4 +1,4 @@
-// v45 — authoritative Sleeper ownership mapping for the selected draft slot.
+// v45.1 — authoritative Sleeper ownership mapping and live pick sync for the selected draft slot.
 (()=>{
   const POLL_MS=1000;
   const INPUT_KEY='de34_draft_input';
@@ -12,6 +12,20 @@
   let lastSig='';
 
   const esc45=v=>typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function ensureStatus(){
+    let el=document.getElementById('deFastSync43');
+    if(el)return el;
+    const state=document.getElementById('draftState');
+    if(!state)return null;
+    el=document.createElement('div');
+    el.id='deFastSync43';
+    el.className='small';
+    el.style.cssText='margin:-14px 0 14px;color:#91a0ad';
+    el.textContent='Live sync ready';
+    state.insertAdjacentElement('afterend',el);
+    return el;
+  }
 
   function inputValue(){
     return document.getElementById('draftId')?.value?.trim()||localStorage.getItem(INPUT_KEY)||'';
@@ -75,15 +89,8 @@
     if(!slot||!p)return false;
     const users=userIdsForSlot(slot);
     const pickedBy=String(p.picked_by||'').trim();
-
-    // Sleeper documents picked_by as the user_id the pick belongs to.
     if(pickedBy&&users.length)return users.includes(pickedBy);
-
-    // For mocks/empty slots Sleeper can leave picked_by blank. The selected
-    // draft position maps directly to the pick's draft_slot / board column.
     if(Number(p.draft_slot)===Number(slot))return true;
-
-    // Final compatibility fallback for league drafts whose pick payload omits draft_slot.
     if(p.draft_slot==null||p.draft_slot===''){
       const roster=rosterForSlot(slot);
       if(roster&&String(p.roster_id||'')===roster)return true;
@@ -117,7 +124,7 @@
     const root=ensurePanel();if(!root)return;
     const slot=selectedSlot();
     if(!draftId){root.innerHTML='<h3>Your Picks</h3><div class="small">Connect a Sleeper draft to track your picks.</div>';return}
-    if(!slot){root.innerHTML='<h3>Your Picks</h3><div class="small">Choose your draft slot above so Draft Edge knows which picks are yours.</div>';return}
+    if(!slot){root.innerHTML='<h3>Your Picks</h3><div class="small">Choose your draft slot above so Workhorse knows which picks are yours.</div>';return}
     const mine=ownPicks();
     const users=userIdsForSlot(slot);
     root.innerHTML='<h3>Your Picks · Draft Slot '+slot+'</h3>'+
@@ -154,7 +161,7 @@
     return changed;
   }
   function status(text,bad=false){
-    const el=document.getElementById('deFastSync43');if(!el)return;
+    const el=ensureStatus();if(!el)return;
     el.textContent=text;el.style.color=bad?'#f0a2ad':'#91a0ad';
   }
   function signature(arr){return arr.map(p=>[p.pick_no,p.player_id,p.picked_by,p.roster_id,p.draft_slot].join(':')).join('|')}
@@ -176,11 +183,11 @@
     }finally{busy=false}
   }
   function start(){
-    try{window.DraftEdgeFastDraftSync?.stop?.()}catch(_){}
     clearInterval(timer);timer=setInterval(tick,POLL_MS);tick();
   }
 
   function install(){
+    ensureStatus();
     const connect=document.getElementById('connectDraft');
     const stop=document.getElementById('stopDraft');
     const slot=document.getElementById('deDraftSlot');
