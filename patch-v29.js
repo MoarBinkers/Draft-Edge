@@ -1,4 +1,4 @@
-// v29.2 — foundational normalization, market matching, list sanitation, and synced-player exclusions.
+// v29.3 — foundational normalization, market matching, list sanitation, and synced-player exclusions.
 (()=>{
   function cleanPlayerName(value){
     let s=String(value||"").trim().replace(/\s+/g," ");
@@ -33,7 +33,9 @@
   marketFor=function(p){return marketMatch(p)?.entry||null};
   imgUrl=function(p){const m=marketFor(p);return m?.id?"https://sleepercdn.com/content/nfl/players/thumb/"+encodeURIComponent(m.id)+".jpg":""};
   moveText=function(p){
-    const m=Number(marketFor(p)?.move)||0;
+    const info=marketFor(p);
+    if(!info||info.rank==null)return {text:"—",cls:"flat"};
+    const m=Number(info.move)||0;
     return {text:m>0?"+"+m:String(m),cls:m>0?"up":m<0?"down":"flat"};
   };
 
