@@ -1,4 +1,4 @@
-// v80.0 — safe current-ranking-list deletion with a dedicated, non-squeezing action row.
+// v80.1 — safe current-ranking-list deletion tucked into Settings as a small secondary action.
 (()=>{
   let deleting=false;
 
@@ -8,30 +8,10 @@
 
   function activeId(){try{return activeListId?String(activeListId):''}catch(_){return ''}}
 
-  function listControlAnchor(){
-    const id=activeId();
-    const name=String(currentListSafe()?.name||'').trim();
-
-    const preferred=[
-      document.getElementById('rankingListSelect'),
-      document.getElementById('rankListSelect'),
-      document.getElementById('listSelect'),
-      document.querySelector('[data-ranking-list-select]')
-    ].filter(Boolean);
-    if(preferred.length)return preferred[0];
-
-    for(const select of document.querySelectorAll('select')){
-      const options=[...select.options];
-      if(id&&options.some(o=>String(o.value)===id))return select;
-      if(name&&options.some(o=>String(o.textContent||'').trim()===name))return select;
-    }
-
-    const newListButton=[...document.querySelectorAll('button')].find(btn=>{
-      const text=String(btn.textContent||'').trim().toLowerCase();
-      const onclick=String(btn.getAttribute('onclick')||'');
-      return onclick.includes('openNewList')||text==='new list'||text.includes('new list');
-    });
-    return newListButton||null;
+  function settingsHost(){
+    const modal=document.getElementById('settingsModal');
+    if(!modal)return null;
+    return modal.querySelector('.modalbox')||modal;
   }
 
   function ensureStyles(){
@@ -41,42 +21,39 @@
     style.textContent=`
       #workhorseDeleteListRow{
         width:100%!important;
-        max-width:100%!important;
         box-sizing:border-box!important;
         display:flex!important;
         justify-content:flex-end!important;
         align-items:center!important;
-        clear:both!important;
-        flex:1 0 100%!important;
-        grid-column:1 / -1!important;
-        margin:8px 0 0!important;
-        padding:0!important;
+        margin:16px 0 0!important;
+        padding:12px 0 0!important;
+        border-top:1px solid rgba(255,255,255,.07)!important;
       }
       #workhorseDeleteListBtn{
         position:static!important;
         inset:auto!important;
         transform:none!important;
         float:none!important;
-        flex:0 0 auto!important;
         width:auto!important;
-        min-width:96px!important;
-        max-width:100%!important;
-        min-height:36px!important;
+        min-width:0!important;
+        min-height:30px!important;
         margin:0!important;
-        padding:8px 12px!important;
-        border:1px solid #8f4652!important;
-        border-radius:9px!important;
-        background:rgba(143,70,82,.08)!important;
-        color:#efb3bd!important;
-        font-weight:750!important;
+        padding:5px 9px!important;
+        border:1px solid rgba(143,70,82,.72)!important;
+        border-radius:7px!important;
+        background:transparent!important;
+        color:#d99aa5!important;
+        font-size:11px!important;
+        line-height:1.2!important;
+        font-weight:700!important;
         cursor:pointer!important;
         box-sizing:border-box!important;
       }
-      #workhorseDeleteListBtn:hover{background:rgba(143,70,82,.17)!important;border-color:#b65a69!important;}
+      #workhorseDeleteListBtn:hover{background:rgba(143,70,82,.12)!important;border-color:#a95563!important;color:#efb3bd!important;}
       #workhorseDeleteListBtn:disabled{opacity:.55!important;cursor:default!important;}
       @media(max-width:620px){
-        #workhorseDeleteListRow{margin-top:10px!important;}
-        #workhorseDeleteListBtn{width:100%!important;min-height:42px!important;}
+        #workhorseDeleteListRow{margin-top:14px!important;padding-top:10px!important;}
+        #workhorseDeleteListBtn{min-height:32px!important;padding:6px 10px!important;}
       }
     `;
     document.head.appendChild(style);
@@ -122,19 +99,15 @@
     }finally{
       deleting=false;
       const live=document.getElementById('workhorseDeleteListBtn');
-      if(live){live.disabled=false;live.textContent='Delete List'}
+      if(live){live.disabled=false;live.textContent='Delete current list'}
     }
   }
 
   function ensureDeleteButton(){
     try{
       ensureStyles();
-      const list=currentListSafe(),anchor=listControlAnchor();
-      if(!list||!anchor)return false;
-
-      let host=anchor.parentElement;
-      if(!host)return false;
-      if(host.parentElement&&host.children.length===1&&host.parentElement.children.length<=8)host=host.parentElement;
+      const list=currentListSafe(),host=settingsHost();
+      if(!host){return false}
 
       let row=document.getElementById('workhorseDeleteListRow');
       if(!row){row=document.createElement('div');row.id='workhorseDeleteListRow'}
@@ -142,11 +115,20 @@
 
       let btn=document.getElementById('workhorseDeleteListBtn');
       if(!btn){
-        btn=document.createElement('button');btn.type='button';btn.id='workhorseDeleteListBtn';btn.textContent='Delete List';
+        btn=document.createElement('button');
+        btn.type='button';
+        btn.id='workhorseDeleteListBtn';
         btn.addEventListener('click',deleteCurrentList);
       }
       if(btn.parentElement!==row)row.appendChild(btn);
-      btn.title='Delete '+String(list.name||'this ranking list');
+
+      if(list){
+        btn.style.display='';
+        btn.textContent=deleting?'Deleting…':'Delete current list';
+        btn.title='Delete '+String(list.name||'this ranking list');
+      }else{
+        btn.style.display='none';
+      }
       return true;
     }catch(e){console.warn('Workhorse Delete List control skipped',e);return false}
   }
