@@ -1,9 +1,10 @@
-// v39.2 — deterministic desktop pointer reordering; tiers stay visual-only in position views.
+// v39.3 — deterministic desktop pointer reordering with strict click/drag separation.
 (()=>{
   let fixing=false;
   let state=null;
   let suppressClickUntil=0;
   const DESKTOP_QUERY='(min-width: 821px)';
+  const DRAG_THRESHOLD=10;
   const isDesktop=()=>window.matchMedia?.(DESKTOP_QUERY).matches;
 
   const pKey=p=>{
@@ -35,15 +36,15 @@
   window.resequencePos=resequencePos;
 
   function installCss(){
-    if(document.getElementById('workhorse-rank-pointer-v392'))return;
+    if(document.getElementById('workhorse-rank-pointer-v393'))return;
+    document.getElementById('workhorse-rank-pointer-v392')?.remove();
     const s=document.createElement('style');
-    s.id='workhorse-rank-pointer-v392';
+    s.id='workhorse-rank-pointer-v393';
     s.textContent=`
       @media (min-width:821px){
         #rankList .player[data-index]{-webkit-user-select:none;user-select:none;cursor:grab}
-        #rankList .player[data-index]:active{cursor:grabbing}
         #rankList .player[data-index] img{-webkit-user-drag:none!important;user-drag:none!important;pointer-events:none}
-        #rankList .player.wh-pointer-dragging{opacity:.46!important}
+        #rankList .player.wh-pointer-dragging{opacity:.46!important;cursor:grabbing!important}
         #rankList .player.wh-drop-before{box-shadow:inset 0 3px 0 #60a5fa!important}
         #rankList .player.wh-drop-after{box-shadow:inset 0 -3px 0 #60a5fa!important}
         #rankList .tier-drop.wh-tier-target{outline:2px solid rgba(96,165,250,.68);outline-offset:-2px}
@@ -118,8 +119,8 @@
       return {row:t.row,tier:null,after:t.after};
     }
 
-    let hit=document.elementFromPoint(x,y);
-    let tier=hit?.closest?.('#rankList > .tier-drop[data-tier]')||nearestTierAt(y);
+    const hit=document.elementFromPoint(x,y);
+    const tier=hit?.closest?.('#rankList > .tier-drop[data-tier]')||nearestTierAt(y);
     if(!tier)return {row:null,tier:null,after:false};
     const rows=[...tier.querySelectorAll(':scope > .player[data-index]')].filter(r=>r!==state?.row&&r.offsetParent!==null);
     const t=targetInRows(rows,y);
@@ -127,6 +128,7 @@
   }
 
   function markTarget(x,y){
+    if(!state?.active)return;
     clearMarks();
     const t=resolveTarget(x,y);
     state.targetRow=t.row;
@@ -200,13 +202,14 @@
 
   function finish(doCommit){
     if(!state)return;
-    const wasActive=state.active;
+    const current=state;
+    const wasActive=current.active;
     if(wasActive&&doCommit)commit();
-    state.row?.classList.remove('wh-pointer-dragging');
+    current.row?.classList.remove('wh-pointer-dragging');
     document.body.classList.remove('wh-ranking-dragging');
     clearMarks();
-    if(wasActive)suppressClickUntil=Date.now()+350;
-    try{state.row?.releasePointerCapture?.(state.pointerId)}catch(_){}
+    if(wasActive)suppressClickUntil=Date.now()+250;
+    if(wasActive){try{current.row?.releasePointerCapture?.(current.pointerId)}catch(_){}}
     state=null;
     disableNativeRows();
   }
@@ -217,7 +220,15 @@
       startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,
       sourceTier:tierVal(player.tier),targetRow:null,targetTier:null,after:false
     };
-    try{row.setPointerCapture?.(e.pointerId)}catch(_){}
+  }
+
+  function activateDrag(e){
+    if(!state||state.active)return;
+    state.active=true;
+    try{state.row.setPointerCapture?.(state.pointerId)}catch(_){}
+    state.row.classList.add('wh-pointer-dragging');
+    document.body.classList.add('wh-ranking-dragging');
+    markTarget(e.clientX,e.clientY);
   }
 
   document.addEventListener('pointerdown',e=>{
@@ -234,10 +245,8 @@
     if(!state||e.pointerId!==state.pointerId)return;
     state.lastX=e.clientX;state.lastY=e.clientY;
     if(!state.active){
-      if(Math.hypot(e.clientX-state.startX,e.clientY-state.startY)<5)return;
-      state.active=true;
-      state.row.classList.add('wh-pointer-dragging');
-      document.body.classList.add('wh-ranking-dragging');
+      if(Math.hypot(e.clientX-state.startX,e.clientY-state.startY)<DRAG_THRESHOLD)return;
+      activateDrag(e);
     }
     e.preventDefault();
     markTarget(e.clientX,e.clientY);
@@ -246,10 +255,23 @@
 
   document.addEventListener('pointerup',e=>{
     if(!state||e.pointerId!==state.pointerId)return;
-    if(state.active){e.preventDefault();markTarget(e.clientX,e.clientY)}
-    finish(true);
+    if(state.active){
+      e.preventDefault();
+      markTarget(e.clientX,e.clientY);
+      finish(true);
+    }else{
+      // A normal click: discard pending drag state without capture or click suppression.
+      finish(false);
+    }
   },true);
+
   document.addEventListener('pointercancel',e=>{if(state&&e.pointerId===state.pointerId)finish(false)},true);
+  window.addEventListener('blur',()=>{if(state)finish(false)});
+
+  // If the browser unexpectedly loses capture during a real drag, always clear drag UI/state.
+  document.addEventListener('lostpointercapture',e=>{
+    if(state?.active&&e.pointerId===state.pointerId)setTimeout(()=>{if(state?.active&&state.pointerId===e.pointerId)finish(false)},0);
+  },true);
 
   // Kill the old HTML5 drag path on desktop so two drag engines can never compete.
   document.addEventListener('dragstart',e=>{
