@@ -117,8 +117,15 @@
     return 'data:image/webp;base64,'+chunks.join('').replace(/\s+/g,'');
   }
 
-  // Startup-only branding. Never observe the full app DOM: rankings intentionally move nodes.
+  // Reveal the usable app immediately with a lightweight brand fallback.
+  // The full Workhorse logo and favicon continue loading in the background.
   apply();
+  const startupInner=document.querySelector('.brand-lockup-inner');
+  if(startupInner && !mainLogoData){
+    startupInner.innerHTML='<div style="font-weight:1000;font-size:34px;letter-spacing:-.04em;text-align:center">WORKHORSE<div style="font-size:10px;letter-spacing:.28em;color:#8194a4;margin-top:4px">FANTASY ANALYTICS</div></div>';
+  }
+  revealApp();
+
   Promise.all([loadData(ICON_PARTS),loadData(MAIN_PARTS)]).then(([icon,main])=>{
     iconData=icon;
     mainLogoData=main;
