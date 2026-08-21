@@ -1,4 +1,4 @@
-// v80.1 — safe current-ranking-list deletion tucked into Settings as a small secondary action.
+// v80.2 — safe current-ranking-list deletion without running Settings cleanup after unrelated clicks.
 (()=>{
   let deleting=false;
 
@@ -133,8 +133,15 @@
     }catch(e){console.warn('Workhorse Delete List control skipped',e);return false}
   }
 
-  ensureDeleteButton();
-  [150,450,900,1800,3500].forEach(ms=>setTimeout(ensureDeleteButton,ms));
-  document.addEventListener('click',()=>setTimeout(ensureDeleteButton,0));
+  function observeSettings(){
+    const modal=document.getElementById('settingsModal');
+    if(!modal||modal.__wh80Observed)return false;
+    const ob=new MutationObserver(()=>{if(modal.classList.contains('open'))setTimeout(ensureDeleteButton,0)});
+    ob.observe(modal,{attributes:true,attributeFilter:['class']});
+    modal.__wh80Observed=true;return true;
+  }
+
+  ensureDeleteButton();observeSettings();
+  [150,450,900,1800,3500].forEach(ms=>setTimeout(()=>{ensureDeleteButton();observeSettings()},ms));
   window.WorkhorseDeleteList={refresh:ensureDeleteButton,deleteCurrent:deleteCurrentList};
 })();
