@@ -1,36 +1,74 @@
-// v60.3 — clean onboarding from the current Sleeper ADP snapshot with explicit list creation confirmation.
+// v60.4 — guarantee brand-new My Rankings starts as an exact Sleeper Full PPR ADP mirror.
 (()=>{
   const MIGRATION_KEY='de60_clean_adp_onboarding';
-  let busy=false,createConfirmBusy=false;
+  const STARTER_FORMAT='ppr';
+  const STARTER_LIMIT=300;
+  let busy=false,createConfirmBusy=false,starterRowsPromise=null;
 
-  const hasCentralAdp=()=>{
-    try{
-      if(!Array.isArray(sleeperPool)||sleeperPool.length<100)return false;
-      let ranked=0;
-      for(const p of sleeperPool){
-        try{if(Number.isFinite(Number(marketFor(p)?.rank)))ranked++}catch(_){}
-        if(ranked>=100)return true;
-      }
-    }catch(_){}
-    return false;
-  };
+  const allowedPos=pos=>['QB','RB','WR','TE'].includes(String(pos||'').toUpperCase());
 
-  function freshPlayers(){
+  function starterClient(){
+    try{return supabaseClient||null}catch(_){return null}
+  }
+
+  async function fetchStarterRows(force=false){
+    if(starterRowsPromise&&!force)return starterRowsPromise;
+    const client=starterClient();
+    if(!client)return null;
+    starterRowsPromise=(async()=>{
+      const {data,error}=await client.from('sleeper_adp_current')
+        .select('player_id,full_name,position,team,sleeper_rank,position_rank,sleeper_adp,captured_at')
+        .eq('format',STARTER_FORMAT)
+        .in('position',['QB','RB','WR','TE'])
+        .not('sleeper_rank','is',null)
+        .order('sleeper_rank',{ascending:true})
+        .limit(STARTER_LIMIT);
+      if(error)throw error;
+      const rows=(Array.isArray(data)?data:[])
+        .filter(r=>allowedPos(r.position)&&Number(r.sleeper_rank)>0&&r.player_id&&r.full_name)
+        .sort((a,b)=>Number(a.sleeper_rank)-Number(b.sleeper_rank))
+        .slice(0,STARTER_LIMIT);
+      if(rows.length<100)throw new Error('Sleeper ADP snapshot is incomplete.');
+      return rows;
+    })();
+    try{return await starterRowsPromise}catch(e){starterRowsPromise=null;throw e}
+  }
+
+  function playersFromRows(rows){
+    return (Array.isArray(rows)?rows:[]).map(r=>({
+      overall:Number(r.sleeper_rank),
+      name:String(r.full_name||'').trim(),
+      position:String(r.position||'NA').toUpperCase(),
+      team:String(r.team||'—').trim()||'—',
+      bye:'—',
+      posRank:Number(r.position_rank)||null,
+      tier:null,
+      tags:[],
+      note:'',
+      drafted:false,
+      draftedAt:null,
+      draftedSource:null,
+      draftedDraftId:null,
+      draftedPickNo:null,
+      sleeperId:String(r.player_id||'')||null
+    }));
+  }
+
+  function freshPlayersFromMemory(){
     let pool=[];
-    try{pool=(Array.isArray(sleeperPool)?sleeperPool:[]).filter(p=>POS.includes(p.position))}catch(_){return []}
+    try{pool=(Array.isArray(sleeperPool)?sleeperPool:[]).filter(p=>allowedPos(p.position))}catch(_){return []}
     pool=pool.filter(p=>{try{return Number.isFinite(Number(marketFor(p)?.rank))}catch(_){return false}})
       .sort((a,b)=>Number(marketFor(a)?.rank||99999)-Number(marketFor(b)?.rank||99999))
-      .slice(0,300);
-    const pc={};
-    return pool.map((p,i)=>{
-      pc[p.position]=(pc[p.position]||0)+1;
+      .slice(0,STARTER_LIMIT);
+    return pool.map(p=>{
+      let m=null;try{m=marketFor(p)}catch(_){}
       return {
-        overall:i+1,
+        overall:Number(m?.rank)||99999,
         name:p.name,
         position:p.position||p.pos||'NA',
         team:p.team||'—',
         bye:p.bye??'—',
-        posRank:pc[p.position],
+        posRank:Number(m?.posRank)||null,
         tier:null,
         tags:[],
         note:'',
@@ -39,24 +77,24 @@
         draftedSource:null,
         draftedDraftId:null,
         draftedPickNo:null,
-        sleeperId:p.id||p.sleeperId||null
+        sleeperId:p.id||p.sleeperId||m?.id||null
       };
-    });
+    }).sort((a,b)=>a.overall-b.overall);
   }
 
   function untouchedBuiltInList(list){
     if(!list||list.name!=='My Rankings'||!Array.isArray(list.players)||!list.players.length)return false;
-    let initial=null;
-    try{initial=Array.isArray(INITIAL)?INITIAL:null}catch(_){}
+    let initial=null;try{initial=Array.isArray(INITIAL)?INITIAL:null}catch(_){}
     if(!initial||list.players.length!==initial.length)return false;
-    let initialTiers=null;
-    try{initialTiers=INITIAL_TIERS}catch(_){}
+    let initialTiers=null;try{initialTiers=INITIAL_TIERS}catch(_){}
     if(!initialTiers)return false;
     for(const pos of POS){
       const a=Array.isArray(list.tiers?.[pos])?list.tiers[pos]:[];
       const b=Array.isArray(initialTiers?.[pos])?initialTiers[pos]:[];
       if(a.length!==b.length)return false;
-      for(let j=0;j<b.length;j++)if(Number(a[j]?.id)!==Number(b[j]?.id)||String(a[j]?.name||'')!==String(b[j]?.name||''))return false;
+      for(let j=0;j<b.length;j++){
+        if(Number(a[j]?.id)!==Number(b[j]?.id)||String(a[j]?.name||'')!==String(b[j]?.name||''))return false;
+      }
     }
     for(let i=0;i<initial.length;i++){
       const p=list.players[i],src=initial[i];
@@ -71,51 +109,65 @@
     return true;
   }
 
-  function cleanListData(name='My Rankings'){
-    const ps=freshPlayers();
-    if(ps.length<100)return null;
-    return {id:localId(),name,players:ps,tiers:emptyTiers(),draftPrefs:null,excludedSleeperIds:[],createdAt:Date.now(),updatedAt:Date.now()};
+  function cleanListData(name,ps){
+    if(!Array.isArray(ps)||ps.length<100)return null;
+    return {
+      id:localId(),name:name||'My Rankings',players:ps,tiers:emptyTiers(),draftPrefs:null,
+      excludedSleeperIds:[],createdAt:Date.now(),updatedAt:Date.now()
+    };
   }
 
   async function createCloudStarter(){
-    if(busy||!currentUser||activeListId||Object.keys(rankingLists||{}).length||!hasCentralAdp())return false;
+    if(busy||!currentUser||activeListId||Object.keys(rankingLists||{}).length)return false;
     busy=true;
     try{
-      const list=cleanListData();if(!list)return false;
+      const rows=await fetchStarterRows();
+      if(!rows)return false;
+      if(!currentUser||activeListId||Object.keys(rankingLists||{}).length)return false;
+      const list=cleanListData('My Rankings',playersFromRows(rows));
+      if(!list)return false;
       await persistNewList(list);
       activeTagFilter='ALL';
       document.getElementById('newListModal')?.classList.remove('open');
       try{renderEverything()}catch(_){}
       return true;
     }catch(e){
-      console.warn('Workhorse starter rankings could not be created',e);
+      console.warn('Workhorse starter rankings could not be created from Sleeper ADP',e);
       return false;
     }finally{busy=false}
   }
 
-  function migrateUntouchedLocalStarter(){
-    if(currentUser||!hasCentralAdp())return false;
+  async function migrateUntouchedLocalStarter(){
+    if(currentUser)return false;
     let ids=[];try{ids=Object.keys(rankingLists||{})}catch(_){return false}
     if(ids.length!==1)return false;
-    const id=ids[0],list=rankingLists[id];
-    if(!untouchedBuiltInList(list))return false;
-    const ps=freshPlayers();if(ps.length<100)return false;
-    list.players=ps;
-    list.tiers=emptyTiers();
-    list.draftPrefs=null;
-    list.excludedSleeperIds=[];
-    list.updatedAt=Date.now();
-    rankingLists[id]=list;
-    activeListId=id;
-    loadActiveList();
-    activeTagFilter='ALL';
-    try{saveLocalLists()}catch(_){}
-    try{localStorage.setItem(MIGRATION_KEY,'1')}catch(_){}
-    try{renderEverything()}catch(_){}
-    return true;
+    const id=ids[0],before=rankingLists[id];
+    if(!untouchedBuiltInList(before))return false;
+    try{
+      const rows=await fetchStarterRows();
+      if(!rows||currentUser)return false;
+      const list=rankingLists?.[id];
+      if(!list||!untouchedBuiltInList(list))return false;
+      list.players=playersFromRows(rows);
+      list.tiers=emptyTiers();
+      list.draftPrefs=null;
+      list.excludedSleeperIds=[];
+      list.updatedAt=Date.now();
+      rankingLists[id]=list;
+      activeListId=id;
+      loadActiveList();
+      activeTagFilter='ALL';
+      try{saveLocalLists()}catch(_){}
+      try{localStorage.setItem(MIGRATION_KEY,'1')}catch(_){}
+      try{renderEverything()}catch(_){}
+      return true;
+    }catch(e){
+      console.warn('Workhorse local starter could not be replaced with Sleeper ADP',e);
+      return false;
+    }
   }
 
-  // Any explicitly-created "from ADP" list should also be guaranteed clean.
+  // Explicit "from ADP" lists preserve the current ADP format the user is viewing.
   const baseCreateNamedList=typeof createNamedList==='function'?createNamedList:null;
   if(baseCreateNamedList){
     createNamedList=async function(kind){
@@ -123,8 +175,9 @@
       const name=document.getElementById('newListName')?.value?.trim();
       if(!name){document.getElementById('newListName')?.focus();return}
       try{
-        if(!hasCentralAdp()&&typeof refreshCurrentAdp==='function')await refreshCurrentAdp();
-        const list=cleanListData(name);
+        if(typeof refreshCurrentAdp==='function')await refreshCurrentAdp();
+        const ps=freshPlayersFromMemory();
+        const list=cleanListData(name,ps);
         if(!list)throw new Error('Sleeper ADP is still loading.');
         await persistNewList(list);
         activeTagFilter='ALL';
@@ -157,7 +210,6 @@
     const modal=document.getElementById('newListModal');
     const input=document.getElementById('newListName');
     if(!modal||!input)return false;
-
     let btn=document.getElementById('workhorseCreateListConfirm');
     if(!btn){
       btn=document.createElement('button');
@@ -172,7 +224,6 @@
       btn.addEventListener('click',confirmNewList);
       input.insertAdjacentElement('afterend',btn);
     }
-
     if(!input.dataset.workhorseCreateConfirm){
       input.dataset.workhorseCreateConfirm='1';
       input.addEventListener('keydown',e=>{
@@ -184,23 +235,22 @@
     return true;
   }
 
-  // Cloud reliability may have wrapped loadCloudLists before this patch. Extend its final behavior.
+  // Cloud reliability loads the account first. If the account has zero lists, create the starter from Sleeper PPR directly.
   const baseLoadCloudLists=typeof loadCloudLists==='function'?loadCloudLists:null;
   if(baseLoadCloudLists){
     loadCloudLists=async function(){
       const out=await baseLoadCloudLists.apply(this,arguments);
-      if(currentUser&&!activeListId)await createCloudStarter();
+      if(currentUser&&!activeListId&&Object.keys(rankingLists||{}).length===0)await createCloudStarter();
       return out;
     };
     try{window.loadCloudLists=loadCloudLists}catch(_){}
   }
 
   async function reconcile(){
-    if(!hasCentralAdp())return;
     if(currentUser){
-      if(!activeListId)await createCloudStarter();
+      if(!activeListId&&Object.keys(rankingLists||{}).length===0)await createCloudStarter();
     }else{
-      migrateUntouchedLocalStarter();
+      await migrateUntouchedLocalStarter();
     }
     try{window.WorkhorseReconcileSleeperRankings?.()}catch(_){}
   }
