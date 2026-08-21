@@ -1,4 +1,4 @@
-// v74.6 — player drawer separates real football news from market signals.
+// v74.7 — player drawer news loads after the base detail opens so clicks stay responsive.
 (()=>{
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
@@ -187,9 +187,13 @@
 
   function wrap(name,resolver){
     const base=window[name];if(typeof base!=='function'||base.__de74Wrapped)return;
-    const wrapped=async function(...args){
-      const p=resolver(args),out=await base.apply(this,args);
-      try{await hydrate(p)}catch(e){console.warn('Workhorse player outlook unavailable',e)}
+    const wrapped=function(...args){
+      const p=resolver(args);
+      const out=base.apply(this,args);
+      setTimeout(()=>{
+        if(!p)return;
+        hydrate(p).catch(e=>console.warn('Workhorse player outlook unavailable',e));
+      },0);
       return out;
     };
     wrapped.__de74Wrapped=true;wrapped.__de74Base=base;
