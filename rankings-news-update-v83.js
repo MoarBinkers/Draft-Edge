@@ -1,9 +1,10 @@
-// v83.1 — subtle material-news badges on My Rankings + Current ADP only.
+// v83.2 — subtle material-news badges with list-scoped decoration work.
 (()=>{
   const LOOKBACK_HOURS=48;
   const REFRESH_MS=10*60*1000;
   const MAX_ROWS=700;
   const newsByPlayer=new Map();
+  const pendingLists=new Set();
   let client=null,loading=null,lastLoaded=0;
 
   const $=id=>document.getElementById(id);
@@ -61,9 +62,7 @@
     if(/changed this player.?s injury or status|fresh availability signal/.test(f))score+=4;
     if(/volume, efficiency and surrounding competition/.test(f))score+=2;
 
-    // Do not promote relationship/commentary stories just because they mention an older transaction.
-    if(/\b(post-trade rift|reunite|reunited|caught up|joint practices?)\b/.test(h))score-=8;
-
+    if(/reunite|rift|caught up|joint practice|hates? joint practice/.test(h)&&!categories.includes('status'))score-=6;
     return score;
   }
 
@@ -132,9 +131,15 @@
     decorateList($('adpList'));
   }
 
+  function scheduleList(id){
+    if(pendingLists.has(id))return;
+    pendingLists.add(id);
+    queueMicrotask(()=>{pendingLists.delete(id);decorateList($(id))});
+  }
+
   function observe(id){
     const list=$(id);if(!list||list.__whNews83Observed)return false;
-    const mo=new MutationObserver(()=>queueMicrotask(decorate));
+    const mo=new MutationObserver(()=>scheduleList(id));
     mo.observe(list,{childList:true,subtree:true});list.__whNews83Observed=true;return true;
   }
 
