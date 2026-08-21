@@ -62,7 +62,9 @@
     if(/changed this player.?s injury or status|fresh availability signal/.test(f))score+=4;
     if(/volume, efficiency and surrounding competition/.test(f))score+=2;
 
-    if(/reunite|rift|caught up|joint practice|hates? joint practice/.test(h)&&!categories.includes('status'))score-=6;
+    // Do not promote relationship/commentary stories just because they mention an older transaction.
+    if(/\b(post-trade rift|reunite|reunited|caught up|joint practices?)\b/.test(h))score-=8;
+
     return score;
   }
 
