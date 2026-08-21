@@ -1,4 +1,4 @@
-// v79.0 — keep New List actions clean and prevent the Create List button from squeezing existing controls.
+// v79.1 — keep New List actions clean without running layout cleanup after unrelated clicks.
 (()=>{
   function ensureStyles(){
     if(document.getElementById('workhorse-list-modal-layout-style'))return;
@@ -65,7 +65,6 @@
       if(row.parentElement!==host)host.appendChild(row);
       if(btn.parentElement!==row)row.appendChild(btn);
 
-      // Undo the inline layout from the first confirmation-button version.
       btn.style.marginTop='0';
       btn.style.width='100%';
 
@@ -76,8 +75,15 @@
     }
   }
 
-  tidyNewListModal();
-  [120,350,800,1600,3200].forEach(ms=>setTimeout(tidyNewListModal,ms));
-  document.addEventListener('click',()=>setTimeout(tidyNewListModal,0));
+  function observeModal(){
+    const modal=document.getElementById('newListModal');
+    if(!modal||modal.__wh79Observed)return false;
+    const ob=new MutationObserver(()=>{if(modal.classList.contains('open'))setTimeout(tidyNewListModal,0)});
+    ob.observe(modal,{attributes:true,attributeFilter:['class'],childList:true,subtree:true});
+    modal.__wh79Observed=true;return true;
+  }
+
+  tidyNewListModal();observeModal();
+  [120,350,800,1600,3200].forEach(ms=>setTimeout(()=>{tidyNewListModal();observeModal()},ms));
   window.WorkhorseListModalLayout={refresh:tidyNewListModal};
 })();

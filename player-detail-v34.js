@@ -1,6 +1,7 @@
-// v34.1 — player rank details, compact Sleeper history, and current ADP refresh.
+// v34.2 — player details open immediately; heavier ADP history renders after the drawer opens.
 (()=>{
   const HISTORY_KEY='de29_adp_history';
+  let detailRenderSeq=0;
 
   const htmlEsc=v=>typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const clean=v=>typeof cleanPlayerName==='function'?cleanPlayerName(v):String(v||'').trim();
@@ -80,25 +81,43 @@
     return summary+graph+stamp;
   }
 
-  function ownedDetailHtml(p,i){
+  function historyPlaceholder(token){
+    return '<div id="de34History" data-de34-token="'+token+'"><div class="small" style="padding:14px 0;color:#8fa0af">Loading Sleeper ADP history…</div></div>';
+  }
+  function scheduleHistory(p,token){
+    requestAnimationFrame(()=>{
+      const slot=document.getElementById('de34History');
+      if(!slot||slot.dataset.de34Token!==token)return;
+      try{slot.innerHTML=historyHtml(p)}catch(e){
+        console.warn('Workhorse ADP history could not render',e);
+        if(slot&&slot.dataset.de34Token===token)slot.innerHTML='<div class="small" style="padding:14px 0">Sleeper ADP history is temporarily unavailable.</div>';
+      }
+    });
+  }
+
+  function ownedDetailHtml(p,i,token){
     const m=marketFor(p),edge=m?.rank!=null?Number(m.rank)-Number(p.overall):null,mv=Number(m?.move)||0;
     return '<div class="detailhead"><img class="detailimg" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div><h2 style="margin:0">'+htmlEsc(clean(p.name))+'</h2><div class="small">'+htmlEsc(p.team)+' · '+htmlEsc(p.position)+' · Bye '+htmlEsc(p.bye)+'</div></div></div>'+
       '<div class="section"><h3>Rank Snapshot</h3><div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><div class="stat"><b>#'+p.overall+'</b><span>My Overall</span></div><div class="stat"><b>'+p.position+'#'+p.posRank+'</b><span>My Pos Rank</span></div><div class="stat"><b>'+(m?.rank!=null?'#'+m.rank:'—')+'</b><span>Sleeper Overall</span></div><div class="stat"><b>'+(m?.posRank?(m.pos||p.position)+'#'+m.posRank:'—')+'</b><span>Sleeper Pos Rank</span></div><div class="stat"><b class="edge '+(edge>0?'good':edge<0?'bad':'')+'">'+(edge==null?'—':signed(edge))+'</b><span>My Edge</span></div><div class="stat"><b class="move '+moveClass(mv)+'">'+signed(mv)+'</b><span>Latest ADP Move</span></div></div></div>'+
-      '<div class="section"><h3>Sleeper ADP History</h3>'+historyHtml(p)+'</div>'+
+      '<div class="section"><h3>Sleeper ADP History</h3>'+historyPlaceholder(token)+'</div>'+
       '<div class="section"><h3>Tags & Note</h3><div class="tags">'+tagsHtml(p)+' <button class="btn" onclick="openEdit('+i+')" style="padding:6px 10px">＋ Add Tags & Note</button></div></div>'+
       '<div class="section"><h3>Notes</h3><div style="font-size:12px;color:#b8c4ce;white-space:pre-wrap;line-height:1.55">'+htmlEsc(p.note||'No notes yet.')+'</div></div>'+
       '<div class="section" style="padding-top:12px;border-top:1px solid #293744"><button class="btn" onclick="removePlayer('+i+')" style="border-color:#6b3440;color:#fb9aaa;background:#25161b">Remove Player From List</button></div>';
   }
   openDetail=function(i){
     const p=players[i];if(!p)return;
-    document.getElementById('drawerContent').innerHTML=ownedDetailHtml(p,i);
+    const token=String(++detailRenderSeq);
+    document.getElementById('drawerContent').innerHTML=ownedDetailHtml(p,i,token);
     document.getElementById('drawer').classList.add('open');
+    scheduleHistory(p,token);
   };
   window.openMarketDetail=function(name){
     const p=sleeperPool.find(x=>normalized(x.name)===normalized(name))||{name},owned=findPersonalByName(name),m=marketFor(p),mv=Number(m?.move)||0;
     if(owned){openDetail(players.indexOf(owned));return}
-    document.getElementById('drawerContent').innerHTML='<div class="detailhead"><img class="detailimg" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div><h2 style="margin:0">'+htmlEsc(clean(p.name))+'</h2><div class="small">'+htmlEsc(p.team||'FA')+' · '+htmlEsc(p.position||m?.pos||'')+'</div></div></div><div class="section"><h3>Rank Snapshot</h3><div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><div class="stat"><b>'+(m?.rank!=null?'#'+m.rank:'—')+'</b><span>Sleeper Overall</span></div><div class="stat"><b>'+(m?.posRank?(p.position||m.pos)+'#'+m.posRank:'—')+'</b><span>Sleeper Pos Rank</span></div><div class="stat"><b class="move '+moveClass(mv)+'">'+signed(mv)+'</b><span>Latest ADP Move</span></div></div></div><div class="section"><h3>Sleeper ADP History</h3>'+historyHtml(p)+'</div><div class="section"><button class="btn primary" data-detail-add="'+encodeURIComponent(p.name)+'">＋ Add To My Rankings</button></div>';
+    const token=String(++detailRenderSeq);
+    document.getElementById('drawerContent').innerHTML='<div class="detailhead"><img class="detailimg" src="'+imgUrl(p)+'" onerror="this.style.visibility=\'hidden\'"><div><h2 style="margin:0">'+htmlEsc(clean(p.name))+'</h2><div class="small">'+htmlEsc(p.team||'FA')+' · '+htmlEsc(p.position||m?.pos||'')+'</div></div></div><div class="section"><h3>Rank Snapshot</h3><div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><div class="stat"><b>'+(m?.rank!=null?'#'+m.rank:'—')+'</b><span>Sleeper Overall</span></div><div class="stat"><b>'+(m?.posRank?(p.position||m.pos)+'#'+m.posRank:'—')+'</b><span>Sleeper Pos Rank</span></div><div class="stat"><b class="move '+moveClass(mv)+'">'+signed(mv)+'</b><span>Latest ADP Move</span></div></div></div><div class="section"><h3>Sleeper ADP History</h3>'+historyPlaceholder(token)+'</div><div class="section"><button class="btn primary" data-detail-add="'+encodeURIComponent(p.name)+'">＋ Add To My Rankings</button></div>';
     document.getElementById('drawer').classList.add('open');
+    scheduleHistory(p,token);
     const b=document.querySelector('[data-detail-add]');if(b)b.onclick=()=>{addPlayerFromPoolName(decodeURIComponent(b.dataset.detailAdd));document.getElementById('drawer').classList.remove('open')};
   };
 

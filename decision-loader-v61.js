@@ -1,6 +1,6 @@
 // v61 feature loader — download optional features in parallel while preserving execution order. Production redeploy checkpoint.
 (()=>{
-  const files=['./draft-current-pick-v68.js?v=682','./round-bands-v61.js?v=614','./adp-unranked-label-v78.js?v=782','./list-modal-layout-v79.js?v=790','./list-delete-v80.js?v=801','./smart-search-v62.js?v=621','./player-compare-v63.js?v=631','./edge-heat-v64.js?v=641','./draft-recap-v65.js?v=652','./draft-recap-trigger-v66.js?v=661','./draft-risk-v73.js?v=734','./player-fantasy-outlook-v74.js?v=746','./mobile-polish-v81.js?v=81'];
+  const files=['./draft-current-pick-v68.js?v=682','./round-bands-v61.js?v=614','./adp-unranked-label-v78.js?v=782','./list-modal-layout-v79.js?v=791','./list-delete-v80.js?v=802','./smart-search-v62.js?v=621','./player-compare-v63.js?v=631','./edge-heat-v64.js?v=642','./draft-recap-v65.js?v=652','./draft-recap-trigger-v66.js?v=661','./draft-risk-v73.js?v=734','./player-fantasy-outlook-v74.js?v=747','./mobile-polish-v81.js?v=81'];
   const loadOne=src=>new Promise(resolve=>{
     try{
       const s=document.createElement('script');
