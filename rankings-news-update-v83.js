@@ -1,4 +1,4 @@
-// v83 — subtle material-news badges on My Rankings + Current ADP only.
+// v83.1 — subtle material-news badges on My Rankings + Current ADP only.
 (()=>{
   const LOOKBACK_HOURS=48;
   const REFRESH_MS=10*60*1000;
@@ -60,6 +60,9 @@
     if(/roster change can materially affect/.test(f))score+=3;
     if(/changed this player.?s injury or status|fresh availability signal/.test(f))score+=4;
     if(/volume, efficiency and surrounding competition/.test(f))score+=2;
+
+    // Do not promote relationship/commentary stories just because they mention an older transaction.
+    if(/\b(post-trade rift|reunite|reunited|caught up|joint practices?)\b/.test(h))score-=8;
 
     return score;
   }
