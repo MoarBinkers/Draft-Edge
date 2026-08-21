@@ -1,4 +1,4 @@
-// v74.7 — player drawer news loads after the base detail opens so clicks stay responsive.
+// v74.7 — player drawer news waits until after the base detail opens so clicks stay responsive.
 (()=>{
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
@@ -190,11 +190,13 @@
     const wrapped=function(...args){
       const p=resolver(args);
       const out=base.apply(this,args);
-      setTimeout(()=>{
-        if(!p)return;
-        hydrate(p).catch(e=>console.warn('Workhorse player outlook unavailable',e));
-      },0);
-      return out;
+      return Promise.resolve(out)
+        .then(result=>new Promise(resolve=>setTimeout(()=>resolve(result),0)))
+        .then(async result=>{
+          if(!p)return result;
+          try{await hydrate(p)}catch(e){console.warn('Workhorse player outlook unavailable',e)}
+          return result;
+        });
     };
     wrapped.__de74Wrapped=true;wrapped.__de74Base=base;
     window[name]=wrapped;try{globalThis[name]=wrapped}catch(_){}
