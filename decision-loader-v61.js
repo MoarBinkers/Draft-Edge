@@ -9,7 +9,7 @@
       s.onload=()=>resolve();
       s.onerror=()=>{console.warn('Workhorse optional feature failed to load:',src);resolve()};
       document.body.appendChild(s);
-    }catch(e){console.warn('Workhorse optional feature loader error',src,e);resolve()}
+    }catch(e){console.warn('Workhorse optional feature loader error:',src,e);resolve()}
   });
   Promise.all(files.map(loadOne)).catch(e=>console.warn('Workhorse optional feature batch error',e));
 })();
