@@ -118,6 +118,7 @@
     window.openMarketDetail=wrapped;try{openMarketDetail=wrapped}catch(_){}
   }
 
+  // Also clean any history already stored in this browser from older builds.
   try{
     const old=localStorage.getItem(HISTORY_KEY);
     if(old)localStorage.setItem(HISTORY_KEY,collapseHistoryJson(old));
