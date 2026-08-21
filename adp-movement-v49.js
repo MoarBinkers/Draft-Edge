@@ -1,4 +1,4 @@
-// v49 — one ADP Change source everywhere + collapse unchanged rank snapshots in player history.
+// v49.2 — one ADP Change source everywhere with scoped repaint observers.
 (()=>{
   const HISTORY_KEY='de29_adp_history';
   let painting=false,scheduled=false;
@@ -118,18 +118,39 @@
     window.openMarketDetail=wrapped;try{openMarketDetail=wrapped}catch(_){}
   }
 
-  // Also clean any history already stored in this browser from older builds.
   try{
     const old=localStorage.getItem(HISTORY_KEY);
     if(old)localStorage.setItem(HISTORY_KEY,collapseHistoryJson(old));
   }catch(_){}
 
-  const ob=new MutationObserver(schedulePaint);
-  ob.observe(document.documentElement,{childList:true,subtree:true});
+  function wrapRender(name){
+    try{
+      const base=window[name]||eval(name);
+      if(typeof base!=='function'||base.__de49Paint)return;
+      const wrapped=function(){const out=base.apply(this,arguments);schedulePaint();return out};
+      wrapped.__de49Paint=true;wrapped.__de49Base=base;
+      try{window[name]=wrapped}catch(_){}
+      try{eval(name+'=wrapped')}catch(_){}
+    }catch(_){}
+  }
+
+  function observeRoot(id){
+    const root=document.getElementById(id);if(!root||root.__de49Observed)return false;
+    const ob=new MutationObserver(schedulePaint);
+    ob.observe(root,{childList:true,subtree:true});
+    root.__de49Observed=true;return true;
+  }
+  function installObservers(){
+    ['rankList','draftList','adpList','drawerContent','adpStatus'].forEach(observeRoot);
+  }
+
+  wrapRender('renderRankings');wrapRender('renderDraft');wrapRender('renderAdp');
+  installObservers();
+  [250,900,2200].forEach(ms=>setTimeout(installObservers,ms));
   document.addEventListener('click',e=>{
     if(e.target.closest('#rankPills,[data-adp-format],#topUpdate,#connectDraft,#deDraftSlot'))setTimeout(schedulePaint,0);
   });
-  [0,350,1000,2500,6000].forEach(ms=>setTimeout(paintAll,ms));
+  [0,350,1000,2500].forEach(ms=>setTimeout(paintAll,ms));
 
   window.DraftEdgeAdpMovement={paint:paintAll,collapseRankRuns};
 })();
