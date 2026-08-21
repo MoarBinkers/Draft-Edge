@@ -1,6 +1,6 @@
-// v53 — reliable, polished primary Add Tags & Note CTA in owned-player detail.
+// v53.2 — reliable Add Tags & Note CTA with drawer-scoped decoration work.
 (()=>{
-  let activeIndex=null;
+  let activeIndex=null,decorateScheduled=false;
 
   function injectCss(){
     if(document.getElementById('dePlayerTags53Css'))return;
@@ -102,14 +102,22 @@
     btn.dataset.playerIndex=String(i);
   }
 
+  function scheduleDecorate(){
+    if(decorateScheduled)return;decorateScheduled=true;
+    requestAnimationFrame(()=>{decorateScheduled=false;decorate()});
+  }
+
   function wrapOpenDetail(){
     const base=window.openDetail;
     if(typeof base!=='function'||base.__de53Wrapped)return;
-    const wrapped=async function(...args){
+    const wrapped=function(...args){
       const i=Number(args[0]);
       activeIndex=Number.isInteger(i)?i:null;
-      const out=await base.apply(this,args);
-      decorate();queueMicrotask(decorate);requestAnimationFrame(decorate);
+      const out=base.apply(this,args);
+      decorate();
+      if(!document.getElementById('drawer')?.classList.contains('open')&&out&&typeof out.then==='function'){
+        out.then(scheduleDecorate).catch(()=>{});
+      }
       return out;
     };
     wrapped.__de53Wrapped=true;
@@ -119,8 +127,11 @@
 
   injectCss();
   wrapOpenDetail();
-  const ob=new MutationObserver(()=>{
-    if(document.getElementById('drawer')?.classList.contains('open'))requestAnimationFrame(decorate);
-  });
-  ob.observe(document.documentElement,{childList:true,subtree:true});
+  const root=document.getElementById('drawerContent');
+  if(root){
+    const ob=new MutationObserver(()=>{
+      if(document.getElementById('drawer')?.classList.contains('open'))scheduleDecorate();
+    });
+    ob.observe(root,{childList:true,subtree:true});
+  }
 })();
